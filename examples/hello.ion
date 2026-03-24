@@ -1,0 +1,15 @@
+// ion demo — a minimalist language for Android
+
+app HelloApp
+
+screen Main {
+    text "Welcome to ion! 🦊"
+    button "Say Hello" → toast("Hello from ion!")
+    button "Settings" → navigate(Settings)
+}
+
+screen Settings {
+    text "Settings Page"
+    switch "Dark Mode" → toggle_theme()
+    button "Back" → back()
+}
