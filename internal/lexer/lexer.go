@@ -40,6 +40,12 @@ const (
 	VIBRATE
 	NOTIFY
 	RENDER
+	HTTP
+	STATE
+	SHARE
+	OPEN
+	TIMER
+	ALERT
 	LPAREN
 	RPAREN
 	LBRACE
@@ -76,6 +82,7 @@ func (t Type) String() string {
 		"AWAIT", "BACKGROUND",
 		"TEXT", "BUTTON", "INPUT", "LIST", "IMAGE", "SWITCH", "SLIDER", "CHECKBOX", "PROGRESS",
 		"NAVIGATE", "BACK", "TOAST", "VIBRATE", "NOTIFY", "RENDER",
+		"HTTP", "STATE", "SHARE", "OPEN", "TIMER", "ALERT",
 		"LPAREN", "RPAREN", "LBRACE", "RBRACE", "LBRACKET", "RBRACKET",
 		"COMMA", "DOT", "COLON", "SEMI",
 		"ASSIGN", "ARROW",
@@ -102,7 +109,8 @@ var keywords = map[string]Type{
 	"text": TEXT, "button": BUTTON, "input": INPUT, "list": LIST, "image": IMAGE,
 	"switch": SWITCH, "slider": SLIDER, "checkbox": CHECKBOX, "progress": PROGRESS,
 	"navigate": NAVIGATE, "back": BACK, "toast": TOAST, "vibrate": VIBRATE,
-	"notify": NOTIFY, "render": RENDER,
+	"notify": NOTIFY, "render": RENDER, "http": HTTP, "state": STATE,
+	"share": SHARE, "open": OPEN, "timer": TIMER, "alert": ALERT,
 	"true": BOOL, "false": BOOL,
 }
 

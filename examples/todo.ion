@@ -1,0 +1,33 @@
+// ion demo — showcasing all features
+
+app TodoApp
+
+screen Main {
+    text "📝 My Tasks"
+    input "Add a task..." -> add_task()
+    button "Load from API" -> load_tasks()
+    button "Share App" -> share("Check out this app!")
+    button "About" -> open("https://github.com/Acorx/ion")
+    button "Settings" -> navigate(Settings)
+}
+
+screen Settings {
+    text "⚙️ Settings"
+    switch "Dark Mode" -> toggle_theme()
+    switch "Notifications" -> toggle_notifs()
+    button "Clear Data" -> alert("Confirm", "Delete all data?")
+    button "Back" -> back()
+}
+
+fn add_task() {
+    toast("Task added!")
+}
+
+fn load_tasks() {
+    http get "https://api.example.com/tasks" -> data
+    toast("Loaded!")
+}
+
+fn toggle_theme() {
+    native -> "AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)"
+}

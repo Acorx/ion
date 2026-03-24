@@ -174,6 +174,23 @@ func (g *G) stmt(s parser.Stmt, ind string) string {
 		b.f("%s}.start()\n", ind)
 	case parser.NativeStmt:
 		b.f("%s%s\n", ind, st.Code)
+	case parser.HttpStmt:
+		if st.Method == "GET" {
+			b.f("%sval %s = java.net.URL(%s).readText()\n", ind, st.ResultVar, g.expr(st.URL))
+		} else {
+			b.f("%s// %s %s\n", ind, st.Method, g.expr(st.URL))
+		}
+	case parser.StateStmt:
+		b.f("%svar %s = %s\n", ind, st.Name, g.expr(st.Initial))
+	case parser.ShareStmt:
+		b.f("%sval shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND)\n", ind)
+		b.f("%sshareIntent.type = \"text/plain\"\n", ind)
+		b.f("%sshareIntent.putExtra(android.content.Intent.EXTRA_TEXT, %s)\n", ind, g.expr(st.Text))
+		b.f("%sstartActivity(android.content.Intent.createChooser(shareIntent, \"Share\"))\n", ind)
+	case parser.OpenStmt:
+		b.f("%sstartActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(%s)))\n", ind, g.expr(st.URL))
+	case parser.AlertStmt:
+		b.f("%sandroid.app.AlertDialog.Builder(this).setTitle(%s).setMessage(%s).setPositiveButton(\"OK\", null).show()\n", ind, g.expr(st.Title), g.expr(st.Msg))
 	case parser.ExprStmt:
 		b.f("%s%s\n", ind, g.expr(st.E))
 	}

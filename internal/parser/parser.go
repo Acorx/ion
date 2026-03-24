@@ -2,6 +2,7 @@ package parser
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/Acorx/ion/internal/lexer"
 )
@@ -43,6 +44,11 @@ type AwaitStmt struct{ Call Expr }
 type BgStmt struct{ Body []Stmt }
 type NativeStmt struct{ Code string }
 type ExprStmt struct{ E Expr }
+type HttpStmt struct { Method string; URL Expr; Body Expr; ResultVar string }
+type StateStmt struct { Name string; Initial Expr }
+type ShareStmt struct { Text Expr }
+type OpenStmt struct { URL Expr }
+type AlertStmt struct { Title, Msg Expr }
 
 func (AssignStmt) stmt()  {}
 func (NavStmt) stmt()     {}
@@ -59,6 +65,11 @@ func (AwaitStmt) stmt()   {}
 func (BgStmt) stmt()      {}
 func (NativeStmt) stmt()  {}
 func (ExprStmt) stmt()    {}
+func (HttpStmt) stmt()    {}
+func (StateStmt) stmt()   {}
+func (ShareStmt) stmt()   {}
+func (OpenStmt) stmt()    {}
+func (AlertStmt) stmt()   {}
 
 // UI Node
 type Node interface{ node() }
@@ -295,6 +306,42 @@ func (p *P) stmt() Stmt {
 		p.expect(lexer.RPAREN)
 		return NotifStmt{Title: title, Msg: msg}
 
+	case lexer.HTTP:
+		return p.httpStmt()
+
+	case lexer.STATE:
+		p.next()
+		name := p.expect(lexer.IDENT).Lit
+		var initial Expr
+		if p.is(lexer.ASSIGN) {
+			p.next()
+			initial = p.expr()
+		}
+		return StateStmt{Name: name, Initial: initial}
+
+	case lexer.SHARE:
+		p.next()
+		p.expect(lexer.LPAREN)
+		e := p.expr()
+		p.expect(lexer.RPAREN)
+		return ShareStmt{Text: e}
+
+	case lexer.OPEN:
+		p.next()
+		p.expect(lexer.LPAREN)
+		e := p.expr()
+		p.expect(lexer.RPAREN)
+		return OpenStmt{URL: e}
+
+	case lexer.ALERT:
+		p.next()
+		p.expect(lexer.LPAREN)
+		title := p.expr()
+		p.expect(lexer.COMMA)
+		msg := p.expr()
+		p.expect(lexer.RPAREN)
+		return AlertStmt{Title: title, Msg: msg}
+
 	case lexer.IF:
 		return p.ifStmt()
 
@@ -334,6 +381,25 @@ func (p *P) stmt() Stmt {
 	default:
 		return ExprStmt{E: p.expr()}
 	}
+}
+
+func (p *P) httpStmt() Stmt {
+	p.next() // http
+	method := strings.ToUpper(p.expect(lexer.IDENT).Lit) // get/post/put/delete
+	url := p.expr()
+	var body Expr
+	var resultVar string
+	// Optional: -> variable or { body }
+	if p.is(lexer.ARROW) {
+		p.next()
+		if p.is(lexer.IDENT) {
+			resultVar = p.next().Lit
+		}
+	} else if p.is(lexer.LBRACE) {
+		// body for POST
+		_ = p.block()
+	}
+	return HttpStmt{Method: method, URL: url, Body: body, ResultVar: resultVar}
 }
 
 func (p *P) ifStmt() Stmt {
