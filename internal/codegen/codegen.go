@@ -391,14 +391,23 @@ func (g *G) layoutNode(b *B, e parser.Expr, id int) {
 		case "__button":
 			b.f("    <Button android:id=\"@+id/%s\"\n", uid)
 			b.s("        android:layout_width=\"match_parent\"\n        android:layout_height=\"wrap_content\"\n")
+			if len(ce.Args) > 0 {
+				b.f("        android:text=%s\n", g.expr(ce.Args[0]))
+			}
 			b.s("        android:layout_marginTop=\"4dp\" />\n\n")
 		case "__input":
 			b.f("    <EditText android:id=\"@+id/%s\"\n", uid)
 			b.s("        android:layout_width=\"match_parent\"\n        android:layout_height=\"wrap_content\"\n")
+			if len(ce.Args) > 0 {
+				b.f("        android:hint=%s\n", g.expr(ce.Args[0]))
+			}
 			b.s("        android:layout_marginTop=\"8dp\" />\n\n")
 		case "__switch":
 			b.f("    <Switch android:id=\"@+id/%s\"\n", uid)
 			b.s("        android:layout_width=\"wrap_content\"\n        android:layout_height=\"wrap_content\"\n")
+			if len(ce.Args) > 0 {
+				b.f("        android:text=%s\n", g.expr(ce.Args[0]))
+			}
 			b.s("        android:layout_marginTop=\"8dp\" />\n\n")
 		case "__image":
 			b.f("    <ImageView android:id=\"@+id/%s\"\n", uid)
