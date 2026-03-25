@@ -48,9 +48,26 @@ func (g *G) mainActivity(p *parser.Prog) string {
 	if len(p.Screens) > 0 {
 		sc := p.Screens[0]
 		b.f("        setContentView(R.layout.activity_%s)\n", snake(sc.Name))
-		b.s(g.setupCodeWithFuncs(sc, "        "))
+		b.s(g.setupCode(sc, "        "))
 	}
-	b.s("    }\n}\n")
+	b.s("    }\n")
+
+	// Private methods at class level
+	if len(p.Screens) > 0 {
+		calledFuncs := map[string]bool{}
+		g.collectFuncCalls(p.Screens[0].Body, calledFuncs)
+		for fnName := range calledFuncs {
+			if body, ok := g.funcMap[fnName]; ok {
+				b.f("\n    private fun %s() {\n", fnName)
+				for _, st := range body {
+					b.s(g.stmt(st, "        "))
+				}
+				b.s("    }\n")
+			}
+		}
+	}
+
+	b.s("}\n")
 	return b.String()
 }
 
@@ -63,8 +80,23 @@ func (g *G) screenActivity(s parser.Screen) string {
 	b.s("    override fun onCreate(savedInstanceState: Bundle?) {\n")
 	b.s("        super.onCreate(savedInstanceState)\n")
 	b.f("        setContentView(R.layout.activity_%s)\n\n", snake(s.Name))
-	b.s(g.setupCodeWithFuncs(s, "        "))
-	b.s("    }\n}\n")
+	b.s(g.setupCode(s, "        "))
+	b.s("    }\n")
+
+	// Collect and generate private methods at class level
+	calledFuncs := map[string]bool{}
+	g.collectFuncCalls(s.Body, calledFuncs)
+	for fnName := range calledFuncs {
+		if body, ok := g.funcMap[fnName]; ok {
+			b.f("\n    private fun %s() {\n", fnName)
+			for _, st := range body {
+				b.s(g.stmt(st, "        "))
+			}
+			b.s("    }\n")
+		}
+	}
+
+	b.s("}\n")
 	return b.String()
 }
 
