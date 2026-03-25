@@ -293,9 +293,11 @@ func (g *G) stmt(s parser.Stmt, ind string) string {
 	case parser.HttpStmt:
 		if st.Method == "GET" {
 			if st.ResultVar != "" {
+				b.f("%sval handler = android.os.Handler(android.os.Looper.getMainLooper())\n", ind)
 				b.f("%sThread {\n", ind)
 				b.f("%s    val %s = java.net.URL(%s).readText()\n", ind, st.ResultVar, g.expr(st.URL))
-				b.f("%s}.start()\n", ind)
+				b.f("%s    handler.post {\n", ind)
+				b.f("%s        // %s is now available on UI thread\n", ind, st.ResultVar)
 			} else {
 				b.f("%sThread { java.net.URL(%s).readText() }.start()\n", ind, g.expr(st.URL))
 			}
