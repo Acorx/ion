@@ -280,14 +280,25 @@ func (g *G) stmt(s parser.Stmt, ind string) string {
 	case parser.BgStmt:
 		b.f("%sThread {\n", ind)
 		for _, s2 := range st.Body {
-			b.s(g.stmt(s2, ind+"    "))
+			// Wrap Toast in runOnUiThread inside background blocks
+			if ts, ok := s2.(parser.ToastStmt); ok {
+				b.f("%s    runOnUiThread { Toast.makeText(this, %s, Toast.LENGTH_SHORT).show() }\n", ind, g.expr(ts.Msg))
+			} else {
+				b.s(g.stmt(s2, ind+"    "))
+			}
 		}
 		b.f("%s}.start()\n", ind)
 	case parser.NativeStmt:
 		b.f("%s%s\n", ind, st.Code)
 	case parser.HttpStmt:
 		if st.Method == "GET" {
-			b.f("%sval %s = java.net.URL(%s).readText()\n", ind, st.ResultVar, g.expr(st.URL))
+			if st.ResultVar != "" {
+				b.f("%sThread {\n", ind)
+				b.f("%s    val %s = java.net.URL(%s).readText()\n", ind, st.ResultVar, g.expr(st.URL))
+				b.f("%s}.start()\n", ind)
+			} else {
+				b.f("%sThread { java.net.URL(%s).readText() }.start()\n", ind, g.expr(st.URL))
+			}
 		} else {
 			b.f("%s// %s %s\n", ind, st.Method, g.expr(st.URL))
 		}
