@@ -7,11 +7,19 @@ import (
 	"github.com/Acorx/ion/internal/parser"
 )
 
-type G struct{ pkg string }
+type G struct {
+	pkg     string
+	funcMap map[string][]parser.Stmt // fn name → body
+}
 
-func New(pkg string) *G { return &G{pkg: pkg} }
+func New(pkg string) *G { return &G{pkg: pkg, funcMap: map[string][]parser.Stmt{}} }
 
 func (g *G) Gen(p *parser.Prog) map[string]string {
+	// Build function map
+	for _, fn := range p.Funcs {
+		g.funcMap[fn.Name] = fn.Body
+	}
+
 	files := map[string]string{}
 	files["MainActivity.kt"] = g.mainActivity(p)
 	for _, s := range p.Screens {
@@ -40,7 +48,7 @@ func (g *G) mainActivity(p *parser.Prog) string {
 	if len(p.Screens) > 0 {
 		sc := p.Screens[0]
 		b.f("        setContentView(R.layout.activity_%s)\n", snake(sc.Name))
-		b.s(g.setupCode(sc, "        "))
+		b.s(g.setupCodeWithFuncs(sc, "        "))
 	}
 	b.s("    }\n}\n")
 	return b.String()
@@ -55,12 +63,11 @@ func (g *G) screenActivity(s parser.Screen) string {
 	b.s("    override fun onCreate(savedInstanceState: Bundle?) {\n")
 	b.s("        super.onCreate(savedInstanceState)\n")
 	b.f("        setContentView(R.layout.activity_%s)\n\n", snake(s.Name))
-	b.s(g.setupCode(s, "        "))
+	b.s(g.setupCodeWithFuncs(s, "        "))
 	b.s("    }\n}\n")
 	return b.String()
 }
 
-// setupCode generates Kotlin code for component event handlers
 func (g *G) setupCode(s parser.Screen, ind string) string {
 	var b B
 	id := 0
@@ -73,10 +80,83 @@ func (g *G) setupCode(s parser.Screen, ind string) string {
 				continue
 			}
 		}
-		// Regular statement
 		b.s(g.stmt(st, ind))
 	}
 	return b.String()
+}
+
+// setupCodeWithFuncs generates setup code + private methods for called functions
+func (g *G) setupCodeWithFuncs(s parser.Screen, ind string) string {
+	var b B
+	b.s(g.setupCode(s, ind))
+
+	// Collect called function names
+	calledFuncs := map[string]bool{}
+	g.collectFuncCalls(s.Body, calledFuncs)
+
+	// Generate private methods
+	for fnName := range calledFuncs {
+		if body, ok := g.funcMap[fnName]; ok {
+			b.f("\n%sprivate fun %s() {\n", ind, fnName)
+			for _, st := range body {
+				b.s(g.stmt(st, ind+"    "))
+			}
+			b.f("%s}\n", ind)
+		}
+	}
+	return b.String()
+}
+
+func (g *G) collectFuncCalls(stmts []parser.Stmt, called map[string]bool) {
+	for _, st := range stmts {
+		switch s := st.(type) {
+		case parser.ExprStmt:
+			g.collectExprFuncs(s.E, called)
+		case parser.IfStmt:
+			g.collectFuncCalls(s.Then, called)
+			g.collectFuncCalls(s.Else, called)
+		case parser.ForStmt:
+			g.collectFuncCalls(s.Body, called)
+		case parser.WhileStmt:
+			g.collectFuncCalls(s.Body, called)
+		case parser.BgStmt:
+			g.collectFuncCalls(s.Body, called)
+		}
+	}
+}
+
+func (g *G) collectExprFuncs(e parser.Expr, called map[string]bool) {
+	if e == nil {
+		return
+	}
+	switch ex := e.(type) {
+	case parser.CallExpr:
+		if _, ok := g.funcMap[ex.Fn]; ok {
+			called[ex.Fn] = true
+		}
+		for _, a := range ex.Args {
+			g.collectExprFuncs(a, called)
+			// Also check if arg is a BlockExpr
+			if blk, ok := a.(*parser.BlockExpr); ok {
+				g.collectFuncCalls(blk.Body, called)
+			}
+		}
+	case parser.BinExpr:
+		g.collectExprFuncs(ex.L, called)
+		g.collectExprFuncs(ex.R, called)
+	case parser.MethodExpr:
+		g.collectExprFuncs(ex.Obj, called)
+		for _, a := range ex.Args {
+			g.collectExprFuncs(a, called)
+		}
+	case parser.UnExpr:
+		g.collectExprFuncs(ex.R, called)
+	case parser.FieldExpr:
+		g.collectExprFuncs(ex.Obj, called)
+	case parser.IdxExpr:
+		g.collectExprFuncs(ex.Obj, called)
+		g.collectExprFuncs(ex.Idx, called)
+	}
 }
 
 func (g *G) setupComponent(ce parser.CallExpr, uid, ind string) string {
@@ -92,23 +172,22 @@ func (g *G) setupComponent(ce parser.CallExpr, uid, ind string) string {
 		if len(ce.Args) > 0 {
 			label = g.expr(ce.Args[0])
 		}
-		// If there's a handler arg (index 1), wire it up
+		b.f("%sfindViewById<Button>(R.id.%s).setOnClickListener {\n", ind, uid)
 		if len(ce.Args) > 1 {
+			// Has handler
 			if blk, ok := ce.Args[1].(*parser.BlockExpr); ok {
-				b.f("%sfindViewById<Button>(R.id.%s).setOnClickListener {\n", ind, uid)
 				for _, s := range blk.Body {
 					b.s(g.stmt(s, ind+"    "))
 				}
-				b.f("%s}\n", ind)
 			}
 		} else {
-			b.f("%sfindViewById<Button>(R.id.%s).setOnClickListener {\n", ind, uid)
 			b.f("%s    Toast.makeText(this, %s, Toast.LENGTH_SHORT).show()\n", ind, label)
-			b.f("%s}\n", ind)
 		}
+		b.f("%s}\n", ind)
 
 	case "__input":
 		// nothing to wire by default
+
 	case "__switch":
 		if len(ce.Args) > 1 {
 			if blk, ok := ce.Args[1].(*parser.BlockExpr); ok {
@@ -240,7 +319,6 @@ func (g *G) expr(e parser.Expr) string {
 		}
 		return fmt.Sprintf("listOf(%s)", strings.Join(elems, ", "))
 	case parser.BlockExpr:
-		// Block as expression — generate lambda
 		var b B
 		b.s("{\n")
 		for _, s := range ex.Body {
@@ -277,16 +355,19 @@ func (g *G) layoutNode(b *B, e parser.Expr, id int) {
 		case "__text":
 			b.f("    <TextView android:id=\"@+id/%s\"\n", uid)
 			b.s("        android:layout_width=\"wrap_content\"\n        android:layout_height=\"wrap_content\"\n")
-			b.s("        android:textSize=\"18sp\" />\n\n")
+			b.s("        android:textSize=\"18sp\" android:padding=\"8dp\" />\n\n")
 		case "__button":
 			b.f("    <Button android:id=\"@+id/%s\"\n", uid)
-			b.s("        android:layout_width=\"wrap_content\"\n        android:layout_height=\"wrap_content\" />\n\n")
+			b.s("        android:layout_width=\"match_parent\"\n        android:layout_height=\"wrap_content\"\n")
+			b.s("        android:layout_marginTop=\"4dp\" />\n\n")
 		case "__input":
 			b.f("    <EditText android:id=\"@+id/%s\"\n", uid)
-			b.s("        android:layout_width=\"match_parent\"\n        android:layout_height=\"wrap_content\" />\n\n")
+			b.s("        android:layout_width=\"match_parent\"\n        android:layout_height=\"wrap_content\"\n")
+			b.s("        android:layout_marginTop=\"8dp\" />\n\n")
 		case "__switch":
 			b.f("    <Switch android:id=\"@+id/%s\"\n", uid)
-			b.s("        android:layout_width=\"wrap_content\"\n        android:layout_height=\"wrap_content\" />\n\n")
+			b.s("        android:layout_width=\"wrap_content\"\n        android:layout_height=\"wrap_content\"\n")
+			b.s("        android:layout_marginTop=\"8dp\" />\n\n")
 		case "__image":
 			b.f("    <ImageView android:id=\"@+id/%s\"\n", uid)
 			b.s("        android:layout_width=\"wrap_content\"\n        android:layout_height=\"wrap_content\" />\n\n")
@@ -302,6 +383,7 @@ func (g *G) manifest(p *parser.Prog) string {
 	var b B
 	b.s("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n")
 	b.f("<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\" package=\"%s\">\n", g.pkg)
+	b.s("    <uses-permission android:name=\"android.permission.INTERNET\" />\n")
 	b.f("    <application android:label=\"%s\"\n", p.Name)
 	b.s("        android:theme=\"@style/Theme.AppCompat.Light\">\n")
 	b.s("        <activity android:name=\".MainActivity\" android:exported=\"true\">\n")
