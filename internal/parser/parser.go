@@ -29,64 +29,97 @@ type Func struct {
 // Stmt
 type Stmt interface{ stmt() }
 
-type AssignStmt struct{ Name string; Val Expr }
+type AssignStmt struct {
+	Name string
+	Val  Expr
+}
 type NavStmt struct{ Target string }
 type BackStmt struct{}
 type ToastStmt struct{ Msg Expr }
 type VibStmt struct{}
 type NotifStmt struct{ Title, Msg Expr }
 type RenderStmt struct{ Comp Node }
-type IfStmt struct{ Cond Expr; Then, Else []Stmt }
-type ForStmt struct{ Var string; Iter Expr; Body []Stmt }
-type WhileStmt struct{ Cond Expr; Body []Stmt }
+type IfStmt struct {
+	Cond       Expr
+	Then, Else []Stmt
+}
+type ForStmt struct {
+	Var  string
+	Iter Expr
+	Body []Stmt
+}
+type WhileStmt struct {
+	Cond Expr
+	Body []Stmt
+}
 type RetStmt struct{ Val Expr }
 type AwaitStmt struct{ Call Expr }
 type BgStmt struct{ Body []Stmt }
 type NativeStmt struct{ Code string }
 type ExprStmt struct{ E Expr }
-type HttpStmt struct { Method string; URL Expr; Body Expr; ResultVar string }
-type StateStmt struct { Name string; Initial Expr }
-type ShareStmt struct { Text Expr }
-type OpenStmt struct { URL Expr }
-type AlertStmt struct { Title, Msg Expr }
+type HttpStmt struct {
+	Method    string
+	URL       Expr
+	Body      Expr
+	ResultVar string
+}
+type StateStmt struct {
+	Name    string
+	Initial Expr
+}
+type ShareStmt struct{ Text Expr }
+type OpenStmt struct{ URL Expr }
+type AlertStmt struct{ Title, Msg Expr }
 
-func (AssignStmt) stmt()  {}
-func (NavStmt) stmt()     {}
-func (BackStmt) stmt()    {}
-func (ToastStmt) stmt()   {}
-func (VibStmt) stmt()     {}
-func (NotifStmt) stmt()   {}
-func (RenderStmt) stmt()  {}
-func (IfStmt) stmt()      {}
-func (ForStmt) stmt()     {}
-func (WhileStmt) stmt()   {}
-func (RetStmt) stmt()     {}
-func (AwaitStmt) stmt()   {}
-func (BgStmt) stmt()      {}
-func (NativeStmt) stmt()  {}
-func (ExprStmt) stmt()    {}
-func (HttpStmt) stmt()    {}
-func (StateStmt) stmt()   {}
-func (ShareStmt) stmt()   {}
-func (OpenStmt) stmt()    {}
-func (AlertStmt) stmt()   {}
+func (AssignStmt) stmt() {}
+func (NavStmt) stmt()    {}
+func (BackStmt) stmt()   {}
+func (ToastStmt) stmt()  {}
+func (VibStmt) stmt()    {}
+func (NotifStmt) stmt()  {}
+func (RenderStmt) stmt() {}
+func (IfStmt) stmt()     {}
+func (ForStmt) stmt()    {}
+func (WhileStmt) stmt()  {}
+func (RetStmt) stmt()    {}
+func (AwaitStmt) stmt()  {}
+func (BgStmt) stmt()     {}
+func (NativeStmt) stmt() {}
+func (ExprStmt) stmt()   {}
+func (HttpStmt) stmt()   {}
+func (StateStmt) stmt()  {}
+func (ShareStmt) stmt()  {}
+func (OpenStmt) stmt()   {}
+func (AlertStmt) stmt()  {}
 
 // UI Node
 type Node interface{ node() }
 
 type TextNode struct{ Val Expr }
-type BtnNode struct{ Label Expr; Handler []Stmt }
-type InputNode struct{ Hint Expr; Handler []Stmt }
-type ListNode struct{ Items Expr; Item []Node }
+type BtnNode struct {
+	Label   Expr
+	Handler []Stmt
+}
+type InputNode struct {
+	Hint    Expr
+	Handler []Stmt
+}
+type ListNode struct {
+	Items Expr
+	Item  []Node
+}
 type ImgNode struct{ Src Expr }
-type SwitchNode struct{ Label Expr; Handler []Stmt }
+type SwitchNode struct {
+	Label   Expr
+	Handler []Stmt
+}
 
-func (TextNode) node()    {}
-func (BtnNode) node()     {}
-func (InputNode) node()   {}
-func (ListNode) node()    {}
-func (ImgNode) node()     {}
-func (SwitchNode) node()  {}
+func (TextNode) node()   {}
+func (BtnNode) node()    {}
+func (InputNode) node()  {}
+func (ListNode) node()   {}
+func (ImgNode) node()    {}
+func (SwitchNode) node() {}
 
 // Expr
 type Expr interface{ expr() }
@@ -95,12 +128,32 @@ type StrExpr struct{ V string }
 type NumExpr struct{ V string }
 type BoolExpr struct{ V bool }
 type IdentExpr struct{ Name string }
-type BinExpr struct{ L Expr; Op string; R Expr }
-type UnExpr struct{ Op string; R Expr }
-type CallExpr struct{ Fn string; Args []Expr }
-type MethodExpr struct{ Obj Expr; Method string; Args []Expr }
-type FieldExpr struct{ Obj Expr; Field string }
-type IdxExpr struct{ Obj Expr; Idx Expr }
+type BinExpr struct {
+	L  Expr
+	Op string
+	R  Expr
+}
+type UnExpr struct {
+	Op string
+	R  Expr
+}
+type CallExpr struct {
+	Fn   string
+	Args []Expr
+}
+type MethodExpr struct {
+	Obj    Expr
+	Method string
+	Args   []Expr
+}
+type FieldExpr struct {
+	Obj   Expr
+	Field string
+}
+type IdxExpr struct {
+	Obj Expr
+	Idx Expr
+}
 type ArrExpr struct{ Elems []Expr }
 type MapExpr struct{ Entries map[string]Expr }
 type BlockExpr struct{ Body []Stmt }
@@ -201,6 +254,8 @@ func (p *P) stmtOrComp() Stmt {
 		return p.imgComp()
 	case lexer.SWITCH:
 		return p.switchComp()
+	case lexer.PROGRESS:
+		return p.progressComp()
 	}
 	return p.stmt()
 }
@@ -267,6 +322,11 @@ func (p *P) switchComp() Stmt {
 		args = append(args, &BlockExpr{Body: body})
 	}
 	return ExprStmt{E: CallExpr{Fn: "__switch", Args: args}}
+}
+
+func (p *P) progressComp() Stmt {
+	p.next() // progress
+	return ExprStmt{E: CallExpr{Fn: "__progress"}}
 }
 
 func (p *P) stmt() Stmt {
@@ -384,7 +444,7 @@ func (p *P) stmt() Stmt {
 }
 
 func (p *P) httpStmt() Stmt {
-	p.next() // http
+	p.next()                                             // http
 	method := strings.ToUpper(p.expect(lexer.IDENT).Lit) // get/post/put/delete
 	url := p.expr()
 	var body Expr
