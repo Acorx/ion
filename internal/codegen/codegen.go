@@ -23,8 +23,17 @@ func (g *G) Gen(p *parser.Prog) map[string]string {
 	files := map[string]string{}
 	files["MainActivity.kt"] = g.mainActivity(p)
 	for _, s := range p.Screens {
+		if s.Name == "Main" {
+			continue
+		}
 		files[s.Name+"Activity.kt"] = g.screenActivity(s)
 		files["activity_"+snake(s.Name)+".xml"] = g.layout(s)
+	}
+	if len(p.Screens) > 0 && p.Screens[0].Name == "Main" {
+		files["MainActivity.kt"] = g.screenActivity(p.Screens[0])
+	}
+	if len(p.Screens) > 0 {
+		files["activity_"+snake(p.Screens[0].Name)+".xml"] = g.layout(p.Screens[0])
 	}
 	files["AndroidManifest.xml"] = g.manifest(p)
 	files["build.gradle"] = g.gradle()
@@ -40,8 +49,18 @@ func (b *B) s(ss string)                  { b.Builder.WriteString(ss) }
 func (g *G) mainActivity(p *parser.Prog) string {
 	var b B
 	b.f("package %s\n\n", g.pkg)
-	b.s("import android.content.Intent\nimport android.os.Bundle\n")
-	b.s("import android.widget.*\nimport androidx.appcompat.app.AppCompatActivity\n\n")
+	b.s("import android.app.AlertDialog\n")
+	b.s("import android.content.Intent\n")
+	b.s("import android.net.Uri\n")
+	b.s("import android.os.Build\n")
+	b.s("import android.os.Bundle\n")
+	b.s("import android.os.VibrationEffect\n")
+	b.s("import android.os.Vibrator\n")
+	b.s("import android.os.VibratorManager\n")
+	b.s("import android.widget.*\n")
+	b.s("import androidx.appcompat.app.AppCompatActivity\n")
+	b.s("import androidx.appcompat.widget.SwitchCompat\n")
+	b.s("import kotlin.concurrent.thread\n\n")
 	b.s("class MainActivity : AppCompatActivity() {\n")
 	b.s("    override fun onCreate(savedInstanceState: Bundle?) {\n")
 	b.s("        super.onCreate(savedInstanceState)\n")
@@ -67,6 +86,24 @@ func (g *G) mainActivity(p *parser.Prog) string {
 		}
 	}
 
+	b.s("\n    private fun vibrateDevice(milliseconds: Long) {\n")
+	b.s("        val vibrator: Vibrator? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {\n")
+	b.s("            val manager = getSystemService(VIBRATOR_MANAGER_SERVICE) as VibratorManager\n")
+	b.s("            manager.defaultVibrator\n")
+	b.s("        } else {\n")
+	b.s("            @Suppress(\"DEPRECATION\")\n")
+	b.s("            getSystemService(VIBRATOR_SERVICE) as Vibrator\n")
+	b.s("        }\n")
+	b.s("        vibrator?.let {\n")
+	b.s("            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {\n")
+	b.s("                it.vibrate(VibrationEffect.createOneShot(milliseconds, VibrationEffect.DEFAULT_AMPLITUDE))\n")
+	b.s("            } else {\n")
+	b.s("                @Suppress(\"DEPRECATION\")\n")
+	b.s("                it.vibrate(milliseconds)\n")
+	b.s("            }\n")
+	b.s("        }\n")
+	b.s("    }\n")
+
 	b.s("}\n")
 	return b.String()
 }
@@ -74,8 +111,18 @@ func (g *G) mainActivity(p *parser.Prog) string {
 func (g *G) screenActivity(s parser.Screen) string {
 	var b B
 	b.f("package %s\n\n", g.pkg)
-	b.s("import android.content.Intent\nimport android.os.Bundle\n")
-	b.s("import android.widget.*\nimport androidx.appcompat.app.AppCompatActivity\n\n")
+	b.s("import android.app.AlertDialog\n")
+	b.s("import android.content.Intent\n")
+	b.s("import android.net.Uri\n")
+	b.s("import android.os.Build\n")
+	b.s("import android.os.Bundle\n")
+	b.s("import android.os.VibrationEffect\n")
+	b.s("import android.os.Vibrator\n")
+	b.s("import android.os.VibratorManager\n")
+	b.s("import android.widget.*\n")
+	b.s("import androidx.appcompat.app.AppCompatActivity\n")
+	b.s("import androidx.appcompat.widget.SwitchCompat\n")
+	b.s("import kotlin.concurrent.thread\n\n")
 	b.f("class %sActivity : AppCompatActivity() {\n", s.Name)
 	b.s("    override fun onCreate(savedInstanceState: Bundle?) {\n")
 	b.s("        super.onCreate(savedInstanceState)\n")
@@ -95,6 +142,24 @@ func (g *G) screenActivity(s parser.Screen) string {
 			b.s("    }\n")
 		}
 	}
+
+	b.s("\n    private fun vibrateDevice(milliseconds: Long) {\n")
+	b.s("        val vibrator: Vibrator? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {\n")
+	b.s("            val manager = getSystemService(VIBRATOR_MANAGER_SERVICE) as VibratorManager\n")
+	b.s("            manager.defaultVibrator\n")
+	b.s("        } else {\n")
+	b.s("            @Suppress(\"DEPRECATION\")\n")
+	b.s("            getSystemService(VIBRATOR_SERVICE) as Vibrator\n")
+	b.s("        }\n")
+	b.s("        vibrator?.let {\n")
+	b.s("            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {\n")
+	b.s("                it.vibrate(VibrationEffect.createOneShot(milliseconds, VibrationEffect.DEFAULT_AMPLITUDE))\n")
+	b.s("            } else {\n")
+	b.s("                @Suppress(\"DEPRECATION\")\n")
+	b.s("                it.vibrate(milliseconds)\n")
+	b.s("            }\n")
+	b.s("        }\n")
+	b.s("    }\n")
 
 	b.s("}\n")
 	return b.String()
@@ -223,7 +288,7 @@ func (g *G) setupComponent(ce parser.CallExpr, uid, ind string) string {
 	case "__switch":
 		if len(ce.Args) > 1 {
 			if blk, ok := ce.Args[1].(*parser.BlockExpr); ok {
-				b.f("%sfindViewById<Switch>(R.id.%s).setOnCheckedChangeListener { _, isChecked ->\n", ind, uid)
+				b.f("%sfindViewById<SwitchCompat>(R.id.%s).setOnCheckedChangeListener { _, isChecked ->\n", ind, uid)
 				for _, s := range blk.Body {
 					b.s(g.stmt(s, ind+"    "))
 				}
@@ -246,7 +311,7 @@ func (g *G) stmt(s parser.Stmt, ind string) string {
 	case parser.ToastStmt:
 		b.f("%sToast.makeText(this, %s, Toast.LENGTH_SHORT).show()\n", ind, g.expr(st.Msg))
 	case parser.VibStmt:
-		b.f("%svibrate(200)\n", ind)
+		b.f("%svibrateDevice(200)\n", ind)
 	case parser.NotifStmt:
 		b.f("%s// notify: %s, %s\n", ind, g.expr(st.Title), g.expr(st.Msg))
 	case parser.IfStmt:
@@ -278,7 +343,7 @@ func (g *G) stmt(s parser.Stmt, ind string) string {
 	case parser.AwaitStmt:
 		b.f("%s// await %s\n", ind, g.expr(st.Call))
 	case parser.BgStmt:
-		b.f("%sThread {\n", ind)
+		b.f("%sthread(start = true) {\n", ind)
 		for _, s2 := range st.Body {
 			// Wrap Toast in runOnUiThread inside background blocks
 			if ts, ok := s2.(parser.ToastStmt); ok {
@@ -309,7 +374,7 @@ func (g *G) stmt(s parser.Stmt, ind string) string {
 	case parser.OpenStmt:
 		b.f("%sstartActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(%s)))\n", ind, g.expr(st.URL))
 	case parser.AlertStmt:
-		b.f("%sandroid.app.AlertDialog.Builder(this).setTitle(%s).setMessage(%s).setPositiveButton(\"OK\", null).show()\n", ind, g.expr(st.Title), g.expr(st.Msg))
+		b.f("%sAlertDialog.Builder(this).setTitle(%s).setMessage(%s).setPositiveButton(\"OK\", null).show()\n", ind, g.expr(st.Title), g.expr(st.Msg))
 	case parser.ExprStmt:
 		b.f("%s%s\n", ind, g.expr(st.E))
 	}
@@ -411,7 +476,7 @@ func (g *G) layoutNode(b *B, e parser.Expr, id int) {
 			}
 			b.s("        android:layout_marginTop=\"8dp\" />\n\n")
 		case "__switch":
-			b.f("    <Switch android:id=\"@+id/%s\"\n", uid)
+			b.f("    <androidx.appcompat.widget.SwitchCompat android:id=\"@+id/%s\"\n", uid)
 			b.s("        android:layout_width=\"wrap_content\"\n        android:layout_height=\"wrap_content\"\n")
 			if len(ce.Args) > 0 {
 				b.f("        android:text=%s\n", g.expr(ce.Args[0]))
