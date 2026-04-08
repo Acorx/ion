@@ -101,7 +101,8 @@ type BtnNode struct {
 	Handler []Stmt
 }
 type InputNode struct {
-	Hint    Expr
+	Hint Expr
+	BindVar string  // variable to bind input value to
 	Handler []Stmt
 }
 type ListNode struct {
@@ -275,8 +276,19 @@ func (p *P) inputComp() Stmt {
 	p.next() // input
 	hint := p.expr()
 	args := []Expr{hint}
-	args = p.maybeHandler(args)
-	return ExprStmt{E: CallExpr{Fn: "__input", Args: args}}
+	
+	// Check for binding: input "hint" -> variable
+	var bindVar string
+	if p.is(lexer.ARROW) {
+		p.next()
+		if p.is(lexer.IDENT) {
+			bindVar = p.next().Lit
+		}
+	} else {
+		args = p.maybeHandler(args)
+	}
+	
+	return ExprStmt{E: CallExpr{Fn: "__input", Args: append(args, StrExpr{V: bindVar})}}
 }
 
 func (p *P) listComp() Stmt {

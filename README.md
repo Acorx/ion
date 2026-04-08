@@ -2,7 +2,7 @@
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/Acorx/ion)](https://goreportcard.com/report/github.com/Acorx/ion)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.2.0-orange.svg)]()
+[![Version](https://img.shields.io/badge/version-0.3.0-orange.svg)]()
 
 **A minimalist DSL for Android app development.** Write UI and logic in a clean syntax, generate production-ready Kotlin.
 
@@ -33,8 +33,37 @@ fn add_task() {
 }
 
 fn load_tasks() {
-  http get "https://api.example.com/tasks" -> data
-  toast("Loaded!")
+ http get "https://api.example.com/tasks" -> data
+ toast("Loaded!")
+}
+```
+
+### Input Binding (v0.3.0)
+
+Bind inputs to variables and use them directly:
+
+```ion
+screen Form {
+ input "Your name" -> userName
+ input "Your email" -> userEmail
+ button "Submit" -> submit()
+}
+
+fn submit() {
+ toast("Thanks " + userName + "!")
+ share(userEmail)
+}
+```
+
+Generated Kotlin:
+```kotlin
+class MainActivity : AppCompatActivity() {
+ private lateinit var ion_1Input: EditText
+ private lateinit var ion_2Input: EditText
+ private val userName: String get() = ion_1Input.text.toString()
+ private val userEmail: String get() = ion_2Input.text.toString()
+ 
+ // userName and userEmail are accessible in all functions
 }
 ```
 

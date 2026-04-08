@@ -31,7 +31,7 @@ func main() {
 	cmd := os.Args[1]
 	switch cmd {
 	case "-v", "--version":
-		fmt.Println(cyan("ion"), "0.2.0")
+		fmt.Println(cyan("ion"), "0.3.0")
 	case "build":
 		runBuild()
 	case "transpile":

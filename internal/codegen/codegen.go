@@ -8,11 +8,14 @@ import (
 )
 
 type G struct {
-	pkg     string
-	funcMap map[string][]parser.Stmt
+	pkg      string
+	funcMap  map[string][]parser.Stmt
+	bindVars map[string]string // screen -> []input binding variables
 }
 
-func New(pkg string) *G { return &G{pkg: pkg, funcMap: map[string][]parser.Stmt{}} }
+func New(pkg string) *G { 
+	return &G{pkg: pkg, funcMap: map[string][]parser.Stmt{}, bindVars: map[string]string{}} 
+}
 
 func (g *G) Gen(p *parser.Prog) map[string]string {
 	for _, fn := range p.Funcs {
@@ -20,9 +23,9 @@ func (g *G) Gen(p *parser.Prog) map[string]string {
 	}
 
 	files := map[string]string{
-		"MainActivity.kt":    g.mainActivity(p),
+		"MainActivity.kt":   g.mainActivity(p),
 		"AndroidManifest.xml": g.manifest(p),
-		"build.gradle":        g.gradle(),
+		"build.gradle":      g.gradle(),
 	}
 	for _, s := range p.Screens {
 		files[s.Name+"Activity.kt"] = g.screenActivity(s)
@@ -34,20 +37,48 @@ func (g *G) Gen(p *parser.Prog) map[string]string {
 type B struct{ strings.Builder }
 
 func (b *B) f(format string, args ...interface{}) { b.WriteString(fmt.Sprintf(format, args...)) }
-func (b *B) s(str string)                        { b.WriteString(str) }
+func (b *B) s(str string)                         { b.WriteString(str) }
 
 func (g *G) mainActivity(p *parser.Prog) string {
 	var b B
 	b.f("package %s\n\n", g.pkg)
 	b.s("import android.content.Intent\nimport android.os.Bundle\n")
+	b.s("import android.content.Context\n")
 	b.s("import android.widget.*\nimport androidx.appcompat.app.AppCompatActivity\n\n")
 	b.s("class MainActivity : AppCompatActivity() {\n")
-	b.s(" override fun onCreate(savedInstanceState: Bundle?) {\n")
+	
+	// Collect all bound inputs and generate properties
+	boundInputs := []struct{ name, uid string }{}
+	if len(p.Screens) > 0 {
+		sc := p.Screens[0]
+		id := 0
+		for _, st := range sc.Body {
+			id++
+			if es, ok := st.(parser.ExprStmt); ok {
+				if ce, ok := es.E.(parser.CallExpr); ok {
+					if ce.Fn == "__input" && len(ce.Args) >= 2 {
+							if str, ok := ce.Args[1].(parser.StrExpr); ok && str.V != ""{
+							uid := fmt.Sprintf("ion_%d", id)
+							boundInputs = append(boundInputs, struct{ name, uid string }{str.V, uid})
+							b.f(" private lateinit var %sInput: EditText\n", uid)
+						}
+					}
+				}
+			}
+		}
+	}
+	
+	// Generate property getters for bound inputs
+	for _, bi := range boundInputs {
+		b.f(" private val %s: String get() = %sInput.text.toString()\n", bi.name, bi.uid)
+	}
+	
+	b.s("\n override fun onCreate(savedInstanceState: Bundle?) {\n")
 	b.s(" super.onCreate(savedInstanceState)\n")
 	if len(p.Screens) > 0 {
 		sc := p.Screens[0]
 		b.f(" setContentView(R.layout.activity_%s)\n", snake(sc.Name))
-		b.s(g.setupCode(sc, "  "))
+		b.s(g.setupCode(sc, " "))
 	}
 	b.s(" }\n")
 	g.writePrivateMethods(&b, p.Screens)
@@ -57,14 +88,44 @@ func (g *G) mainActivity(p *parser.Prog) string {
 
 func (g *G) screenActivity(s parser.Screen) string {
 	var b B
+	
+	// Collect bound inputs for this screen
+	boundInputs := []struct{ name, uid string }{}
+	id := 0
+	for _, st := range s.Body {
+		id++
+		if es, ok := st.(parser.ExprStmt); ok {
+			if ce, ok := es.E.(parser.CallExpr); ok {
+				if ce.Fn == "__input" && len(ce.Args) >= 2 {
+							if str, ok := ce.Args[1].(parser.StrExpr); ok && str.V != ""{
+						uid := fmt.Sprintf("ion_%d", id)
+						boundInputs = append(boundInputs, struct{ name, uid string }{str.V, uid})
+					}
+				}
+			}
+		}
+	}
+	
 	b.f("package %s\n\n", g.pkg)
 	b.s("import android.content.Intent\nimport android.os.Bundle\n")
+	b.s("import android.content.Context\n")
 	b.s("import android.widget.*\nimport androidx.appcompat.app.AppCompatActivity\n\n")
 	b.f("class %sActivity : AppCompatActivity() {\n", s.Name)
+	
+	// Generate lateinit for each bound input
+	for _, bi := range boundInputs {
+		b.f(" private lateinit var %sInput: EditText\n", bi.uid)
+	}
+	
+	// Generate property getters
+	for _, bi := range boundInputs {
+		b.f(" private val %s: String get() = %sInput.text.toString()\n", bi.name, bi.uid)
+	}
+	
 	b.s(" override fun onCreate(savedInstanceState: Bundle?) {\n")
 	b.s(" super.onCreate(savedInstanceState)\n")
 	b.f(" setContentView(R.layout.activity_%s)\n\n", snake(s.Name))
-	b.s(g.setupCode(s, "  "))
+	b.s(g.setupCode(s, " "))
 	b.s(" }\n")
 	g.writePrivateMethods(&b, []parser.Screen{s})
 	b.s("}\n")
@@ -83,7 +144,7 @@ func (g *G) writePrivateMethods(b *B, screens []parser.Screen) {
 		if body, ok := g.funcMap[fnName]; ok {
 			b.f("\n private fun %s() {\n", fnName)
 			for _, st := range body {
-				b.s(g.stmt(st, "  "))
+				b.s(g.stmt(st, " "))
 			}
 			b.s(" }\n")
 		}
@@ -98,7 +159,7 @@ func (g *G) setupCode(s parser.Screen, ind string) string {
 		uid := fmt.Sprintf("ion_%d", id)
 		if es, ok := st.(parser.ExprStmt); ok {
 			if ce, ok := es.E.(parser.CallExpr); ok {
-				b.s(g.setupComponent(ce, uid, ind))
+				b.s(g.setupComponent(ce, uid, ind, s.Name))
 				continue
 			}
 		}
@@ -107,7 +168,7 @@ func (g *G) setupCode(s parser.Screen, ind string) string {
 	return b.String()
 }
 
-func (g *G) setupComponent(ce parser.CallExpr, uid, ind string) string {
+func (g *G) setupComponent(ce parser.CallExpr, uid, ind, screenName string) string {
 	var b B
 	switch ce.Fn {
 	case "__text":
@@ -125,11 +186,21 @@ func (g *G) setupComponent(ce parser.CallExpr, uid, ind string) string {
 				for _, s := range blk.Body {
 					b.s(g.stmt(s, ind+" "))
 				}
+			} else {
+				b.f("%s Toast.makeText(this, %s, Toast.LENGTH_SHORT).show()\n", ind, label)
 			}
-		} else {
-			b.f("%s Toast.makeText(this, %s, Toast.LENGTH_SHORT).show()\n", ind, label)
 		}
 		b.f("%s}\n", ind)
+	case "__input":
+		// Generate lateinit reference and setup
+		b.f("%s%sInput = findViewById(R.id.%s)\n", ind, uid, uid)
+		b.f("%s%sInput.hint = %s\n", ind, uid, g.expr(ce.Args[0]))
+		// If bound to a variable, generate getter extension
+		if len(ce.Args) >= 2 {
+			if str, ok := ce.Args[1].(parser.StrExpr); ok && str.V != "" {
+				b.f("%s// Bound to: %s\n", ind, str.V)
+			}
+		}
 	case "__switch":
 		if len(ce.Args) > 1 {
 			if blk, ok := ce.Args[1].(*parser.BlockExpr); ok {
@@ -205,7 +276,6 @@ func (g *G) collectExprFuncs(e parser.Expr, called map[string]bool) {
 	}
 }
 
-// stmtHandlers maps statement types to their code generators
 func (g *G) stmt(s parser.Stmt, ind string) string {
 	switch st := s.(type) {
 	case parser.AssignStmt:
@@ -400,36 +470,36 @@ func (g *G) layoutNode(b *B, e parser.Expr, id int) {
 	switch ce.Fn {
 	case "__text":
 		b.f(" <TextView android:id=\"@+id/%s\"\n", uid)
-		b.s("  android:layout_width=\"wrap_content\"\n  android:layout_height=\"wrap_content\"\n")
-		b.s("  android:textSize=\"18sp\" android:padding=\"8dp\" />\n\n")
+		b.s(" android:layout_width=\"wrap_content\"\n android:layout_height=\"wrap_content\"\n")
+		b.s(" android:textSize=\"18sp\" android:padding=\"8dp\" />\n\n")
 	case "__button":
 		b.f(" <Button android:id=\"@+id/%s\"\n", uid)
-		b.s("  android:layout_width=\"match_parent\"\n  android:layout_height=\"wrap_content\"\n")
+		b.s(" android:layout_width=\"match_parent\"\n android:layout_height=\"wrap_content\"\n")
 		if len(ce.Args) > 0 {
-			b.f("  android:text=%s\n", g.expr(ce.Args[0]))
+			b.f(" android:text=%s\n", g.expr(ce.Args[0]))
 		}
-		b.s("  android:layout_marginTop=\"4dp\" />\n\n")
+		b.s(" android:layout_marginTop=\"4dp\" />\n\n")
 	case "__input":
 		b.f(" <EditText android:id=\"@+id/%s\"\n", uid)
-		b.s("  android:layout_width=\"match_parent\"\n  android:layout_height=\"wrap_content\"\n")
+		b.s(" android:layout_width=\"match_parent\"\n android:layout_height=\"wrap_content\"\n")
 		if len(ce.Args) > 0 {
-			b.f("  android:hint=%s\n", g.expr(ce.Args[0]))
+			b.f(" android:hint=%s\n", g.expr(ce.Args[0]))
 		}
-		b.s("  android:layout_marginTop=\"8dp\" />\n\n")
+		b.s(" android:layout_marginTop=\"8dp\" />\n\n")
 	case "__switch":
 		b.f(" <Switch android:id=\"@+id/%s\"\n", uid)
-		b.s("  android:layout_width=\"wrap_content\"\n  android:layout_height=\"wrap_content\"\n")
+		b.s(" android:layout_width=\"wrap_content\"\n android:layout_height=\"wrap_content\"\n")
 		if len(ce.Args) > 0 {
-			b.f("  android:text=%s\n", g.expr(ce.Args[0]))
+			b.f(" android:text=%s\n", g.expr(ce.Args[0]))
 		}
-		b.s("  android:layout_marginTop=\"8dp\" />\n\n")
+		b.s(" android:layout_marginTop=\"8dp\" />\n\n")
 	case "__image":
 		b.f(" <ImageView android:id=\"@+id/%s\"\n", uid)
-		b.s("  android:layout_width=\"wrap_content\"\n  android:layout_height=\"wrap_content\" />\n\n")
+		b.s(" android:layout_width=\"wrap_content\"\n android:layout_height=\"wrap_content\" />\n\n")
 	case "__progress":
 		b.f(" <ProgressBar android:id=\"@+id/%s\"\n", uid)
-		b.s("  android:layout_width=\"match_parent\"\n  android:layout_height=\"wrap_content\"\n")
-		b.s("  style=\"?android:attr/progressBarStyleHorizontal\" android:max=\"100\" />\n\n")
+		b.s(" android:layout_width=\"match_parent\"\n android:layout_height=\"wrap_content\"\n")
+		b.s(" style=\"?android:attr/progressBarStyleHorizontal\" android:max=\"100\" />\n\n")
 	}
 }
 
@@ -439,15 +509,15 @@ func (g *G) manifest(p *parser.Prog) string {
 	b.f("<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\" package=\"%s\">\n", g.pkg)
 	b.s(" <uses-permission android:name=\"android.permission.INTERNET\" />\n")
 	b.f(" <application android:label=\"%s\"\n", p.Name)
-	b.s("  android:theme=\"@style/Theme.AppCompat.Light\">\n")
-	b.s("  <activity android:name=\".MainActivity\" android:exported=\"true\">\n")
-	b.s("   <intent-filter>\n")
-	b.s("    <action android:name=\"android.intent.action.MAIN\" />\n")
-	b.s("    <category android:name=\"android.intent.category.LAUNCHER\" />\n")
-	b.s("   </intent-filter>\n  </activity>\n")
+	b.s(" android:theme=\"@style/Theme.AppCompat.Light\">\n")
+	b.s(" <activity android:name=\".MainActivity\" android:exported=\"true\">\n")
+	b.s(" <intent-filter>\n")
+	b.s(" <action android:name=\"android.intent.action.MAIN\" />\n")
+	b.s(" <category android:name=\"android.intent.category.LAUNCHER\" />\n")
+	b.s(" </intent-filter>\n </activity>\n")
 	if len(p.Screens) > 1 {
 		for _, s := range p.Screens[1:] {
-			b.f("  <activity android:name=\".%sActivity\" />\n", s.Name)
+			b.f(" <activity android:name=\".%sActivity\" />\n", s.Name)
 		}
 	}
 	b.s(" </application>\n</manifest>\n")

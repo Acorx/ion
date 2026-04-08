@@ -1,0 +1,29 @@
+// example/input_binding.ion
+// Demonstrates input binding feature in ion v0.3.0
+
+app DemoApp
+
+screen Main {
+ text "🎯 Input Binding Demo"
+ 
+ // Input with binding to variable 'name'
+ input "Enter your name" -> name
+ 
+ // Input with binding to variable 'email'  
+ input "Enter your email" -> email
+ 
+ // Button that uses the bound variables
+ button "Show Greeting" -> {
+  toast("Hello " + name + "!")
+ }
+ 
+ // Button that shares the email
+ button "Share Email" -> share(email)
+ 
+ // Button that opens a URL with the name as parameter
+ button "Search Name" -> open("https://google.com/search?q=" + name)
+}
+
+fn greet() {
+ toast("Welcome, " + name + "!")
+}
