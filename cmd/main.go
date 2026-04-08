@@ -29,103 +29,114 @@ func main() {
 	}
 
 	cmd := os.Args[1]
-
 	switch cmd {
 	case "-v", "--version":
 		fmt.Println(cyan("ion"), "0.2.0")
-
 	case "build":
-		if len(os.Args) < 3 {
-			fmt.Fprintln(os.Stderr, red("Error:"), "missing input file")
-			usage()
-			os.Exit(1)
-		}
-		input := os.Args[2]
-		out := "output"
-		for i, a := range os.Args {
-			if a == "--out" && i+1 < len(os.Args) {
-				out = os.Args[i+1]
-			}
-		}
-		build(input, out)
-
+		runBuild()
 	case "transpile":
-		if len(os.Args) < 3 {
-			fmt.Fprintln(os.Stderr, red("Error:"), "missing input file")
-			os.Exit(1)
-		}
-		prog := compile(os.Args[2])
-		files := codegen.New(pkgName(prog)).Gen(prog)
-		for n, c := range files {
-			fmt.Printf("%s\n%s\n", bold("// === "+n+" ==="), c)
-		}
-
+		runTranspile()
 	case "format":
-		if len(os.Args) < 3 {
-			fmt.Fprintln(os.Stderr, red("Error:"), "missing input file")
-			os.Exit(1)
-		}
-		prog := compile(os.Args[2])
-		fmt.Println(formatter.Format(prog))
-
+		runFormat()
 	case "check":
-		if len(os.Args) < 3 {
-			fmt.Fprintln(os.Stderr, red("Error:"), "missing input file")
-			os.Exit(1)
-		}
-		src, err := os.ReadFile(os.Args[2])
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "%s %v\n", red("Error:"), err)
-			os.Exit(1)
-		}
-		toks := lexer.New(src).All()
-		prog, errs := parser.New(toks).Parse()
-		if len(errs) > 0 {
-			for _, e := range errs {
-				fmt.Fprintf(os.Stderr, "%s %s\n", red("✗"), e)
-			}
-			os.Exit(1)
-		}
-		fmt.Println(green("✓"), os.Args[2], "valid")
-		fmt.Printf("  %d screens, %d functions\n", len(prog.Screens), len(prog.Funcs))
-
+		runCheck()
 	case "watch":
-		if len(os.Args) < 3 {
-			fmt.Fprintln(os.Stderr, red("Error:"), "missing input file")
-			os.Exit(1)
-		}
-		input := os.Args[2]
-		out := "output"
-		for i, a := range os.Args {
-			if a == "--out" && i+1 < len(os.Args) {
-				out = os.Args[i+1]
-			}
-		}
-		watch(input, out)
-
+		runWatch()
 	default:
 		// Legacy: ion <file.ion>
-		input := cmd
-		out := "output"
-		for i, a := range os.Args {
-			if a == "--out" && i+1 < len(os.Args) {
-				out = os.Args[i+1]
-			}
-		}
-		build(input, out)
+		runLegacy(cmd)
 	}
+}
+
+func runBuild() {
+	input, out := parseFileArg()
+	build(input, out)
+}
+
+func runTranspile() {
+	if len(os.Args) < 3 {
+		fmt.Fprintln(os.Stderr, red("Error:"), "missing input file")
+		os.Exit(1)
+	}
+	prog := compile(os.Args[2])
+	files := codegen.New(pkgName(prog)).Gen(prog)
+	for n, c := range files {
+		fmt.Printf("%s\n%s\n", bold("// === "+n+" ==="), c)
+	}
+}
+
+func runFormat() {
+	if len(os.Args) < 3 {
+		fmt.Fprintln(os.Stderr, red("Error:"), "missing input file")
+		os.Exit(1)
+	}
+	prog := compile(os.Args[2])
+	fmt.Println(formatter.Format(prog))
+}
+
+func runCheck() {
+	if len(os.Args) < 3 {
+		fmt.Fprintln(os.Stderr, red("Error:"), "missing input file")
+		os.Exit(1)
+	}
+	src, err := os.ReadFile(os.Args[2])
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%s %v\n", red("Error:"), err)
+		os.Exit(1)
+	}
+	toks := lexer.New(src).All()
+	prog, errs := parser.New(toks).Parse()
+	if len(errs) > 0 {
+		for _, e := range errs {
+			fmt.Fprintf(os.Stderr, "%s %s\n", red("✗"), e)
+		}
+		os.Exit(1)
+	}
+	fmt.Println(green("✓"), os.Args[2], "valid")
+	fmt.Printf(" %d screens, %d functions\n", len(prog.Screens), len(prog.Funcs))
+}
+
+func runWatch() {
+	input, out := parseFileArg()
+	watch(input, out)
+}
+
+func runLegacy(input string) {
+	out := "output"
+	for i, a := range os.Args {
+		if a == "--out" && i+1 < len(os.Args) {
+			out = os.Args[i+1]
+		}
+	}
+	build(input, out)
+}
+
+func parseFileArg() (input, out string) {
+	if len(os.Args) < 3 {
+		fmt.Fprintln(os.Stderr, red("Error:"), "missing input file")
+		usage()
+		os.Exit(1)
+	}
+	input = os.Args[2]
+	out = "output"
+	for i, a := range os.Args {
+		if a == "--out" && i+1 < len(os.Args) {
+			out = os.Args[i+1]
+		}
+	}
+	return input, out
 }
 
 func usage() {
 	fmt.Print(bold("ion"), " — ", cyan("minimalist language for Android"), "\n\n")
 	fmt.Println(bold("Usage:"))
-	fmt.Printf("  %s <file.ion> [--out dir]     Build app\n", cyan("ion"))
-	fmt.Printf("  %s build <file.ion> [--out]   Build app\n", cyan("ion"))
-	fmt.Printf("  %s transpile <file.ion>       Show Kotlin output\n", cyan("ion"))
-	fmt.Printf("  %s format <file.ion>          Format source\n", cyan("ion"))
-	fmt.Printf("  %s check <file.ion>           Validate without build\n", cyan("ion"))
-	fmt.Printf("  %s watch <file.ion> [--out]   Rebuild on change\n", cyan("ion"))
-	fmt.Printf("  %s -v                         Show version\n", cyan("ion"))
+	fmt.Printf(" %s <file.ion> [--out dir] Build app\n", cyan("ion"))
+	fmt.Printf(" %s build <file.ion> [--out] Build app\n", cyan("ion"))
+	fmt.Printf(" %s transpile <file.ion> Show Kotlin output\n", cyan("ion"))
+	fmt.Printf(" %s format <file.ion> Format source\n", cyan("ion"))
+	fmt.Printf(" %s check <file.ion> Validate without build\n", cyan("ion"))
+	fmt.Printf(" %s watch <file.ion> [--out] Rebuild on change\n", cyan("ion"))
+	fmt.Printf(" %s -v Show version\n", cyan("ion"))
 }
 
 func build(input, out string) {
@@ -136,10 +147,10 @@ func build(input, out string) {
 		p := filepath.Join(out, n)
 		os.MkdirAll(filepath.Dir(p), 0755)
 		os.WriteFile(p, []byte(c), 0644)
-		fmt.Printf("  %s %s\n", green("→"), p)
+		fmt.Printf(" %s %s\n", green("→"), p)
 	}
-	fmt.Printf("\n%s %d files → %s/ (%s)\n", 
-		green("✓"), len(files), out, 
+	fmt.Printf("\n%s %d files → %s/ (%s)\n",
+		green("✓"), len(files), out,
 		yellow(fmt.Sprintf("%.0fms", time.Since(start).Seconds()*1000)))
 }
 
@@ -162,7 +173,7 @@ func compile(path string) *parser.Prog {
 
 func watch(input, out string) {
 	fmt.Printf("%s Watching %s...\n", cyan("⏳"), input)
-	
+
 	lastMod := time.Now()
 	for {
 		time.Sleep(500 * time.Millisecond)

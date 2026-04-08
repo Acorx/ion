@@ -29,64 +29,97 @@ type Func struct {
 // Stmt
 type Stmt interface{ stmt() }
 
-type AssignStmt struct{ Name string; Val Expr }
+type AssignStmt struct {
+	Name string
+	Val  Expr
+}
 type NavStmt struct{ Target string }
 type BackStmt struct{}
 type ToastStmt struct{ Msg Expr }
 type VibStmt struct{}
 type NotifStmt struct{ Title, Msg Expr }
 type RenderStmt struct{ Comp Node }
-type IfStmt struct{ Cond Expr; Then, Else []Stmt }
-type ForStmt struct{ Var string; Iter Expr; Body []Stmt }
-type WhileStmt struct{ Cond Expr; Body []Stmt }
+type IfStmt struct {
+	Cond      Expr
+	Then, Else []Stmt
+}
+type ForStmt struct {
+	Var  string
+	Iter Expr
+	Body []Stmt
+}
+type WhileStmt struct {
+	Cond Expr
+	Body []Stmt
+}
 type RetStmt struct{ Val Expr }
 type AwaitStmt struct{ Call Expr }
 type BgStmt struct{ Body []Stmt }
 type NativeStmt struct{ Code string }
 type ExprStmt struct{ E Expr }
-type HttpStmt struct { Method string; URL Expr; Body Expr; ResultVar string }
-type StateStmt struct { Name string; Initial Expr }
-type ShareStmt struct { Text Expr }
-type OpenStmt struct { URL Expr }
-type AlertStmt struct { Title, Msg Expr }
+type HttpStmt struct {
+	Method    string
+	URL       Expr
+	Body      Expr
+	ResultVar string
+}
+type StateStmt struct {
+	Name    string
+	Initial Expr
+}
+type ShareStmt struct{ Text Expr }
+type OpenStmt struct{ URL Expr }
+type AlertStmt struct{ Title, Msg Expr }
 
-func (AssignStmt) stmt()  {}
-func (NavStmt) stmt()     {}
-func (BackStmt) stmt()    {}
-func (ToastStmt) stmt()   {}
-func (VibStmt) stmt()     {}
-func (NotifStmt) stmt()   {}
-func (RenderStmt) stmt()  {}
-func (IfStmt) stmt()      {}
-func (ForStmt) stmt()     {}
-func (WhileStmt) stmt()   {}
-func (RetStmt) stmt()     {}
-func (AwaitStmt) stmt()   {}
-func (BgStmt) stmt()      {}
-func (NativeStmt) stmt()  {}
-func (ExprStmt) stmt()    {}
-func (HttpStmt) stmt()    {}
-func (StateStmt) stmt()   {}
-func (ShareStmt) stmt()   {}
-func (OpenStmt) stmt()    {}
-func (AlertStmt) stmt()   {}
+func (AssignStmt) stmt() {}
+func (NavStmt) stmt()   {}
+func (BackStmt) stmt()  {}
+func (ToastStmt) stmt() {}
+func (VibStmt) stmt()   {}
+func (NotifStmt) stmt() {}
+func (RenderStmt) stmt() {}
+func (IfStmt) stmt()    {}
+func (ForStmt) stmt()   {}
+func (WhileStmt) stmt() {}
+func (RetStmt) stmt()   {}
+func (AwaitStmt) stmt() {}
+func (BgStmt) stmt()    {}
+func (NativeStmt) stmt() {}
+func (ExprStmt) stmt()  {}
+func (HttpStmt) stmt()  {}
+func (StateStmt) stmt() {}
+func (ShareStmt) stmt() {}
+func (OpenStmt) stmt()  {}
+func (AlertStmt) stmt() {}
 
 // UI Node
 type Node interface{ node() }
 
 type TextNode struct{ Val Expr }
-type BtnNode struct{ Label Expr; Handler []Stmt }
-type InputNode struct{ Hint Expr; Handler []Stmt }
-type ListNode struct{ Items Expr; Item []Node }
+type BtnNode struct {
+	Label   Expr
+	Handler []Stmt
+}
+type InputNode struct {
+	Hint    Expr
+	Handler []Stmt
+}
+type ListNode struct {
+	Items Expr
+	Item  []Node
+}
 type ImgNode struct{ Src Expr }
-type SwitchNode struct{ Label Expr; Handler []Stmt }
+type SwitchNode struct {
+	Label   Expr
+	Handler []Stmt
+}
 
-func (TextNode) node()    {}
-func (BtnNode) node()     {}
-func (InputNode) node()   {}
-func (ListNode) node()    {}
-func (ImgNode) node()     {}
-func (SwitchNode) node()  {}
+func (TextNode) node()   {}
+func (BtnNode) node()    {}
+func (InputNode) node()  {}
+func (ListNode) node()   {}
+func (ImgNode) node()    {}
+func (SwitchNode) node() {}
 
 // Expr
 type Expr interface{ expr() }
@@ -95,23 +128,43 @@ type StrExpr struct{ V string }
 type NumExpr struct{ V string }
 type BoolExpr struct{ V bool }
 type IdentExpr struct{ Name string }
-type BinExpr struct{ L Expr; Op string; R Expr }
-type UnExpr struct{ Op string; R Expr }
-type CallExpr struct{ Fn string; Args []Expr }
-type MethodExpr struct{ Obj Expr; Method string; Args []Expr }
-type FieldExpr struct{ Obj Expr; Field string }
-type IdxExpr struct{ Obj Expr; Idx Expr }
+type BinExpr struct {
+	L  Expr
+	Op string
+	R  Expr
+}
+type UnExpr struct {
+	Op string
+	R  Expr
+}
+type CallExpr struct {
+	Fn   string
+	Args []Expr
+}
+type MethodExpr struct {
+	Obj    Expr
+	Method string
+	Args   []Expr
+}
+type FieldExpr struct {
+	Obj   Expr
+	Field string
+}
+type IdxExpr struct {
+	Obj Expr
+	Idx Expr
+}
 type ArrExpr struct{ Elems []Expr }
 type MapExpr struct{ Entries map[string]Expr }
 type BlockExpr struct{ Body []Stmt }
 
-func (StrExpr) expr()    {}
-func (NumExpr) expr()    {}
-func (BoolExpr) expr()   {}
-func (IdentExpr) expr()  {}
-func (BinExpr) expr()    {}
-func (UnExpr) expr()     {}
-func (CallExpr) expr()   {}
+func (StrExpr) expr()   {}
+func (NumExpr) expr()   {}
+func (BoolExpr) expr()  {}
+func (IdentExpr) expr() {}
+func (BinExpr) expr()   {}
+func (UnExpr) expr()    {}
+func (CallExpr) expr()  {}
 func (MethodExpr) expr() {}
 func (FieldExpr) expr()  {}
 func (IdxExpr) expr()    {}
@@ -213,30 +266,16 @@ func (p *P) textComp() Stmt {
 func (p *P) btnComp() Stmt {
 	p.next() // button
 	label := p.expr()
-	var args []Expr = []Expr{label}
-	if p.is(lexer.ARROW) {
-		p.next()
-		st := p.stmt()
-		args = append(args, &BlockExpr{Body: []Stmt{st}})
-	} else if p.is(lexer.LBRACE) {
-		body := p.block()
-		args = append(args, &BlockExpr{Body: body})
-	}
+	args := []Expr{label}
+	args = p.maybeHandler(args)
 	return ExprStmt{E: CallExpr{Fn: "__button", Args: args}}
 }
 
 func (p *P) inputComp() Stmt {
 	p.next() // input
 	hint := p.expr()
-	var args []Expr = []Expr{hint}
-	if p.is(lexer.ARROW) {
-		p.next()
-		st := p.stmt()
-		args = append(args, &BlockExpr{Body: []Stmt{st}})
-	} else if p.is(lexer.LBRACE) {
-		body := p.block()
-		args = append(args, &BlockExpr{Body: body})
-	}
+	args := []Expr{hint}
+	args = p.maybeHandler(args)
 	return ExprStmt{E: CallExpr{Fn: "__input", Args: args}}
 }
 
@@ -257,146 +296,163 @@ func (p *P) imgComp() Stmt {
 func (p *P) switchComp() Stmt {
 	p.next() // switch
 	label := p.expr()
-	var args []Expr = []Expr{label}
-	if p.is(lexer.ARROW) {
-		p.next()
-		st := p.stmt()
-		args = append(args, &BlockExpr{Body: []Stmt{st}})
-	} else if p.is(lexer.LBRACE) {
-		body := p.block()
-		args = append(args, &BlockExpr{Body: body})
-	}
+	args := []Expr{label}
+	args = p.maybeHandler(args)
 	return ExprStmt{E: CallExpr{Fn: "__switch", Args: args}}
 }
 
+func (p *P) maybeHandler(args []Expr) []Expr {
+	if p.is(lexer.ARROW) {
+		p.next()
+		st := p.stmt()
+		return append(args, &BlockExpr{Body: []Stmt{st}})
+	} else if p.is(lexer.LBRACE) {
+		body := p.block()
+		return append(args, &BlockExpr{Body: body})
+	}
+	return args
+}
+
 func (p *P) stmt() Stmt {
-	switch p.cur().T {
+	tok := p.cur().T
+	switch tok {
 	case lexer.NAVIGATE:
-		p.next()
-		p.expect(lexer.LPAREN)
-		t := p.expect(lexer.IDENT).Lit
-		p.expect(lexer.RPAREN)
-		return NavStmt{Target: t}
-
+		return p.parseNavigate()
 	case lexer.BACK:
-		p.next()
-		if p.is(lexer.LPAREN) {
-			p.next()
-			p.expect(lexer.RPAREN)
-		}
-		return BackStmt{}
-
+		return p.parseBack()
 	case lexer.TOAST:
-		p.next()
-		p.expect(lexer.LPAREN)
-		e := p.expr()
-		p.expect(lexer.RPAREN)
-		return ToastStmt{Msg: e}
-
+		return p.parseToast()
 	case lexer.VIBRATE:
 		p.next()
 		return VibStmt{}
-
 	case lexer.NOTIFY:
-		p.next()
-		p.expect(lexer.LPAREN)
-		title := p.expr()
-		p.expect(lexer.COMMA)
-		msg := p.expr()
-		p.expect(lexer.RPAREN)
-		return NotifStmt{Title: title, Msg: msg}
-
+		return p.parseNotify()
 	case lexer.HTTP:
 		return p.httpStmt()
-
 	case lexer.STATE:
-		p.next()
-		name := p.expect(lexer.IDENT).Lit
-		var initial Expr
-		if p.is(lexer.ASSIGN) {
-			p.next()
-			initial = p.expr()
-		}
-		return StateStmt{Name: name, Initial: initial}
-
+		return p.parseState()
 	case lexer.SHARE:
-		p.next()
-		p.expect(lexer.LPAREN)
-		e := p.expr()
-		p.expect(lexer.RPAREN)
-		return ShareStmt{Text: e}
-
+		return p.parseShare()
 	case lexer.OPEN:
-		p.next()
-		p.expect(lexer.LPAREN)
-		e := p.expr()
-		p.expect(lexer.RPAREN)
-		return OpenStmt{URL: e}
-
+		return p.parseOpen()
 	case lexer.ALERT:
-		p.next()
-		p.expect(lexer.LPAREN)
-		title := p.expr()
-		p.expect(lexer.COMMA)
-		msg := p.expr()
-		p.expect(lexer.RPAREN)
-		return AlertStmt{Title: title, Msg: msg}
-
+		return p.parseAlert()
 	case lexer.IF:
 		return p.ifStmt()
-
 	case lexer.FOR:
 		return p.forStmt()
-
 	case lexer.WHILE:
 		return p.whileStmt()
-
 	case lexer.RETURN:
 		p.next()
 		return RetStmt{Val: p.expr()}
-
 	case lexer.AWAIT:
 		p.next()
 		return AwaitStmt{Call: p.expr()}
-
 	case lexer.BACKGROUND:
 		p.next()
 		return BgStmt{Body: p.block()}
-
 	case lexer.NATIVE:
 		p.next()
 		p.expect(lexer.ARROW)
 		return NativeStmt{Code: p.expect(lexer.STRING).Lit}
-
 	case lexer.IDENT:
 		name := p.next().Lit
 		if p.is(lexer.ASSIGN) {
 			p.next()
 			return AssignStmt{Name: name, Val: p.expr()}
 		}
-		// expression statement
 		p.pos-- // put back
 		return ExprStmt{E: p.expr()}
-
 	default:
 		return ExprStmt{E: p.expr()}
 	}
 }
 
+func (p *P) parseNavigate() Stmt {
+	p.next()
+	p.expect(lexer.LPAREN)
+	t := p.expect(lexer.IDENT).Lit
+	p.expect(lexer.RPAREN)
+	return NavStmt{Target: t}
+}
+
+func (p *P) parseBack() Stmt {
+	p.next()
+	if p.is(lexer.LPAREN) {
+		p.next()
+		p.expect(lexer.RPAREN)
+	}
+	return BackStmt{}
+}
+
+func (p *P) parseToast() Stmt {
+	p.next()
+	p.expect(lexer.LPAREN)
+	e := p.expr()
+	p.expect(lexer.RPAREN)
+	return ToastStmt{Msg: e}
+}
+
+func (p *P) parseNotify() Stmt {
+	p.next()
+	p.expect(lexer.LPAREN)
+	title := p.expr()
+	p.expect(lexer.COMMA)
+	msg := p.expr()
+	p.expect(lexer.RPAREN)
+	return NotifStmt{Title: title, Msg: msg}
+}
+
+func (p *P) parseState() Stmt {
+	p.next()
+	name := p.expect(lexer.IDENT).Lit
+	var initial Expr
+	if p.is(lexer.ASSIGN) {
+		p.next()
+		initial = p.expr()
+	}
+	return StateStmt{Name: name, Initial: initial}
+}
+
+func (p *P) parseShare() Stmt {
+	p.next()
+	p.expect(lexer.LPAREN)
+	e := p.expr()
+	p.expect(lexer.RPAREN)
+	return ShareStmt{Text: e}
+}
+
+func (p *P) parseOpen() Stmt {
+	p.next()
+	p.expect(lexer.LPAREN)
+	e := p.expr()
+	p.expect(lexer.RPAREN)
+	return OpenStmt{URL: e}
+}
+
+func (p *P) parseAlert() Stmt {
+	p.next()
+	p.expect(lexer.LPAREN)
+	title := p.expr()
+	p.expect(lexer.COMMA)
+	msg := p.expr()
+	p.expect(lexer.RPAREN)
+	return AlertStmt{Title: title, Msg: msg}
+}
+
 func (p *P) httpStmt() Stmt {
 	p.next() // http
-	method := strings.ToUpper(p.expect(lexer.IDENT).Lit) // get/post/put/delete
+	method := strings.ToUpper(p.expect(lexer.IDENT).Lit)
 	url := p.expr()
 	var body Expr
 	var resultVar string
-	// Optional: -> variable or { body }
 	if p.is(lexer.ARROW) {
 		p.next()
 		if p.is(lexer.IDENT) {
 			resultVar = p.next().Lit
 		}
 	} else if p.is(lexer.LBRACE) {
-		// body for POST
 		_ = p.block()
 	}
 	return HttpStmt{Method: method, URL: url, Body: body, ResultVar: resultVar}
@@ -447,69 +503,97 @@ func (p *P) block() []Stmt {
 func (p *P) expr() Expr { return p.or() }
 
 func (p *P) or() Expr {
-	l := p.and()
+	e := p.and()
 	for p.is(lexer.OR) {
 		op := p.next().Lit
-		r := p.and()
-		l = BinExpr{L: l, Op: op, R: r}
+		e = BinExpr{L: e, Op: op, R: p.and()}
 	}
-	return l
+	return e
 }
 
 func (p *P) and() Expr {
-	l := p.eq()
+	e := p.eq()
 	for p.is(lexer.AND) {
 		op := p.next().Lit
-		r := p.eq()
-		l = BinExpr{L: l, Op: op, R: r}
+		e = BinExpr{L: e, Op: op, R: p.eq()}
 	}
-	return l
+	return e
 }
 
 func (p *P) eq() Expr {
-	l := p.cmp()
-	for p.is(lexer.EQ) || p.is(lexer.NEQ) {
-		op := p.next().Lit
-		r := p.cmp()
-		l = BinExpr{L: l, Op: op, R: r}
+	e := p.cmp()
+	for {
+		var op string
+		switch {
+		case p.is(lexer.EQ):
+			op = p.next().Lit
+		case p.is(lexer.NEQ):
+			op = p.next().Lit
+		default:
+			return e
+		}
+		e = BinExpr{L: e, Op: op, R: p.cmp()}
 	}
-	return l
 }
 
 func (p *P) cmp() Expr {
-	l := p.add()
-	for p.is(lexer.LT) || p.is(lexer.GT) || p.is(lexer.LTE) || p.is(lexer.GTE) {
-		op := p.next().Lit
-		r := p.add()
-		l = BinExpr{L: l, Op: op, R: r}
+	e := p.add()
+	for {
+		var op string
+		switch {
+		case p.is(lexer.LT):
+			op = p.next().Lit
+		case p.is(lexer.GT):
+			op = p.next().Lit
+		case p.is(lexer.LTE):
+			op = p.next().Lit
+		case p.is(lexer.GTE):
+			op = p.next().Lit
+		default:
+			return e
+		}
+		e = BinExpr{L: e, Op: op, R: p.add()}
 	}
-	return l
 }
 
 func (p *P) add() Expr {
-	l := p.mul()
-	for p.is(lexer.PLUS) || p.is(lexer.MINUS) {
-		op := p.next().Lit
-		r := p.mul()
-		l = BinExpr{L: l, Op: op, R: r}
+	e := p.mul()
+	for {
+		var op string
+		switch {
+		case p.is(lexer.PLUS):
+			op = p.next().Lit
+		case p.is(lexer.MINUS):
+			op = p.next().Lit
+		default:
+			return e
+		}
+		e = BinExpr{L: e, Op: op, R: p.mul()}
 	}
-	return l
 }
 
 func (p *P) mul() Expr {
-	l := p.unary()
-	for p.is(lexer.STAR) || p.is(lexer.SLASH) || p.is(lexer.MOD) {
-		op := p.next().Lit
-		r := p.unary()
-		l = BinExpr{L: l, Op: op, R: r}
+	e := p.unary()
+	for {
+		var op string
+		switch {
+		case p.is(lexer.STAR):
+			op = p.next().Lit
+		case p.is(lexer.SLASH):
+			op = p.next().Lit
+		case p.is(lexer.MOD):
+			op = p.next().Lit
+		default:
+			return e
+		}
+		e = BinExpr{L: e, Op: op, R: p.unary()}
 	}
-	return l
 }
 
 func (p *P) unary() Expr {
 	if p.is(lexer.NOT) || p.is(lexer.MINUS) {
 		op := p.next().Lit
-		return UnExpr{Op: op, R: p.primary()}
+		return UnExpr{Op: op, R: p.unary()}
 	}
 	return p.postfix()
 }
@@ -520,11 +604,12 @@ func (p *P) postfix() Expr {
 		switch {
 		case p.is(lexer.DOT):
 			p.next()
-			f := p.expect(lexer.IDENT).Lit
+			field := p.expect(lexer.IDENT).Lit
 			if p.is(lexer.LPAREN) {
-				e = MethodExpr{Obj: e, Method: f, Args: p.args()}
+				args := p.args()
+				e = MethodExpr{Obj: e, Method: field, Args: args}
 			} else {
-				e = FieldExpr{Obj: e, Field: f}
+				e = FieldExpr{Obj: e, Field: field}
 			}
 		case p.is(lexer.LBRACKET):
 			p.next()
@@ -538,65 +623,90 @@ func (p *P) postfix() Expr {
 }
 
 func (p *P) primary() Expr {
-	switch p.cur().T {
-	case lexer.STRING:
+	switch {
+	case p.is(lexer.STRING):
 		return StrExpr{V: p.next().Lit}
-	case lexer.NUM:
+	case p.is(lexer.NUM):
 		return NumExpr{V: p.next().Lit}
-	case lexer.BOOL:
-		return BoolExpr{V: p.next().Lit == "true"}
-	case lexer.IDENT:
+	case p.is(lexer.BOOL):
+		v := p.next().Lit == "true"
+		return BoolExpr{V: v}
+	case p.is(lexer.IDENT):
 		name := p.next().Lit
 		if p.is(lexer.LPAREN) {
-			return CallExpr{Fn: name, Args: p.args()}
+			args := p.args()
+			return CallExpr{Fn: name, Args: args}
 		}
 		return IdentExpr{Name: name}
-	case lexer.LBRACKET:
-		p.next()
-		var elems []Expr
-		for !p.is(lexer.RBRACKET) && !p.done() {
-			elems = append(elems, p.expr())
-			if p.is(lexer.COMMA) {
-				p.next()
-			}
-		}
-		p.expect(lexer.RBRACKET)
-		return ArrExpr{Elems: elems}
-	case lexer.LPAREN:
+	case p.is(lexer.LPAREN):
 		p.next()
 		e := p.expr()
 		p.expect(lexer.RPAREN)
 		return e
+	case p.is(lexer.LBRACKET):
+		return p.array()
+	case p.is(lexer.LBRACE):
+		return p.blockExpr()
 	default:
-		p.err("unexpected " + p.cur().T.String())
-		p.next()
+		p.err("unexpected token: " + p.cur().T.String())
 		return nil
 	}
 }
 
 func (p *P) args() []Expr {
 	p.expect(lexer.LPAREN)
-	var a []Expr
+	var args []Expr
 	for !p.is(lexer.RPAREN) && !p.done() {
-		a = append(a, p.expr())
+		args = append(args, p.expr())
 		if p.is(lexer.COMMA) {
 			p.next()
 		}
 	}
 	p.expect(lexer.RPAREN)
-	return a
+	return args
+}
+
+func (p *P) array() Expr {
+	p.expect(lexer.LBRACKET)
+	var elems []Expr
+	for !p.is(lexer.RBRACKET) && !p.done() {
+		elems = append(elems, p.expr())
+		if p.is(lexer.COMMA) {
+			p.next()
+		}
+	}
+	p.expect(lexer.RBRACKET)
+	return ArrExpr{Elems: elems}
+}
+
+func (p *P) blockExpr() Expr {
+	p.expect(lexer.LBRACE)
+	var stmts []Stmt
+	for !p.is(lexer.RBRACE) && !p.done() {
+		p.skipNL()
+		if p.is(lexer.RBRACE) {
+			break
+		}
+		stmts = append(stmts, p.stmt())
+		p.skipNL()
+	}
+	p.expect(lexer.RBRACE)
+	return BlockExpr{Body: stmts}
 }
 
 // Helpers
 func (p *P) cur() lexer.Tok {
-	if p.done() {
+	if p.pos >= len(p.toks) {
 		return lexer.Tok{T: lexer.EOF}
 	}
 	return p.toks[p.pos]
 }
 
 func (p *P) next() lexer.Tok {
-	t := p.cur()
+	if p.pos >= len(p.toks) {
+		return lexer.Tok{T: lexer.EOF}
+	}
+	t := p.toks[p.pos]
 	p.pos++
 	return t
 }
@@ -604,26 +714,19 @@ func (p *P) next() lexer.Tok {
 func (p *P) is(t lexer.Type) bool { return p.cur().T == t }
 
 func (p *P) expect(t lexer.Type) lexer.Tok {
-	if p.is(t) {
-		return p.next()
+	if !p.is(t) {
+		p.err(fmt.Sprintf("expected %s, got %s", t.String(), p.cur().T.String()))
+		return lexer.Tok{}
 	}
-	cur := p.cur()
-	p.err(fmt.Sprintf("expected %s, got %s", t, cur.T))
-	if !p.done() {
-		p.next()
-	}
-	return cur
+	return p.next()
 }
-
-func (p *P) done() bool { return p.pos >= len(p.toks) || p.toks[p.pos].T == lexer.EOF }
 
 func (p *P) skipNL() {
-	for p.is(lexer.NEWLINE) || p.is(lexer.SEMI) {
+	for p.is(lexer.NEWLINE) {
 		p.next()
 	}
 }
 
-func (p *P) err(msg string) {
-	cur := p.cur()
-	p.errs = append(p.errs, fmt.Sprintf("line %d, col %d: %s", cur.Line, cur.Col, msg))
-}
+func (p *P) done() bool { return p.pos >= len(p.toks) || p.cur().T == lexer.EOF }
+
+func (p *P) err(msg string) { p.errs = append(p.errs, fmt.Sprintf("%d:%d: %s", p.cur().Line, p.cur().Col, msg)) }

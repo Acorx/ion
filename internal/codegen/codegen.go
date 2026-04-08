@@ -9,33 +9,32 @@ import (
 
 type G struct {
 	pkg     string
-	funcMap map[string][]parser.Stmt // fn name → body
+	funcMap map[string][]parser.Stmt
 }
 
 func New(pkg string) *G { return &G{pkg: pkg, funcMap: map[string][]parser.Stmt{}} }
 
 func (g *G) Gen(p *parser.Prog) map[string]string {
-	// Build function map
 	for _, fn := range p.Funcs {
 		g.funcMap[fn.Name] = fn.Body
 	}
 
-	files := map[string]string{}
-	files["MainActivity.kt"] = g.mainActivity(p)
+	files := map[string]string{
+		"MainActivity.kt":    g.mainActivity(p),
+		"AndroidManifest.xml": g.manifest(p),
+		"build.gradle":        g.gradle(),
+	}
 	for _, s := range p.Screens {
 		files[s.Name+"Activity.kt"] = g.screenActivity(s)
 		files["activity_"+snake(s.Name)+".xml"] = g.layout(s)
 	}
-	files["AndroidManifest.xml"] = g.manifest(p)
-	files["build.gradle"] = g.gradle()
 	return files
 }
 
-// B wraps strings.Builder with helper methods
 type B struct{ strings.Builder }
 
-func (b *B) f(f string, a ...interface{}) { b.Builder.WriteString(fmt.Sprintf(f, a...)) }
-func (b *B) s(ss string)                  { b.Builder.WriteString(ss) }
+func (b *B) f(format string, args ...interface{}) { b.WriteString(fmt.Sprintf(format, args...)) }
+func (b *B) s(str string)                        { b.WriteString(str) }
 
 func (g *G) mainActivity(p *parser.Prog) string {
 	var b B
@@ -43,30 +42,15 @@ func (g *G) mainActivity(p *parser.Prog) string {
 	b.s("import android.content.Intent\nimport android.os.Bundle\n")
 	b.s("import android.widget.*\nimport androidx.appcompat.app.AppCompatActivity\n\n")
 	b.s("class MainActivity : AppCompatActivity() {\n")
-	b.s("    override fun onCreate(savedInstanceState: Bundle?) {\n")
-	b.s("        super.onCreate(savedInstanceState)\n")
+	b.s(" override fun onCreate(savedInstanceState: Bundle?) {\n")
+	b.s(" super.onCreate(savedInstanceState)\n")
 	if len(p.Screens) > 0 {
 		sc := p.Screens[0]
-		b.f("        setContentView(R.layout.activity_%s)\n", snake(sc.Name))
-		b.s(g.setupCode(sc, "        "))
+		b.f(" setContentView(R.layout.activity_%s)\n", snake(sc.Name))
+		b.s(g.setupCode(sc, "  "))
 	}
-	b.s("    }\n")
-
-	// Private methods at class level
-	if len(p.Screens) > 0 {
-		calledFuncs := map[string]bool{}
-		g.collectFuncCalls(p.Screens[0].Body, calledFuncs)
-		for fnName := range calledFuncs {
-			if body, ok := g.funcMap[fnName]; ok {
-				b.f("\n    private fun %s() {\n", fnName)
-				for _, st := range body {
-					b.s(g.stmt(st, "        "))
-				}
-				b.s("    }\n")
-			}
-		}
-	}
-
+	b.s(" }\n")
+	g.writePrivateMethods(&b, p.Screens)
 	b.s("}\n")
 	return b.String()
 }
@@ -77,27 +61,33 @@ func (g *G) screenActivity(s parser.Screen) string {
 	b.s("import android.content.Intent\nimport android.os.Bundle\n")
 	b.s("import android.widget.*\nimport androidx.appcompat.app.AppCompatActivity\n\n")
 	b.f("class %sActivity : AppCompatActivity() {\n", s.Name)
-	b.s("    override fun onCreate(savedInstanceState: Bundle?) {\n")
-	b.s("        super.onCreate(savedInstanceState)\n")
-	b.f("        setContentView(R.layout.activity_%s)\n\n", snake(s.Name))
-	b.s(g.setupCode(s, "        "))
-	b.s("    }\n")
-
-	// Collect and generate private methods at class level
-	calledFuncs := map[string]bool{}
-	g.collectFuncCalls(s.Body, calledFuncs)
-	for fnName := range calledFuncs {
-		if body, ok := g.funcMap[fnName]; ok {
-			b.f("\n    private fun %s() {\n", fnName)
-			for _, st := range body {
-				b.s(g.stmt(st, "        "))
-			}
-			b.s("    }\n")
-		}
-	}
-
+	b.s(" override fun onCreate(savedInstanceState: Bundle?) {\n")
+	b.s(" super.onCreate(savedInstanceState)\n")
+	b.f(" setContentView(R.layout.activity_%s)\n\n", snake(s.Name))
+	b.s(g.setupCode(s, "  "))
+	b.s(" }\n")
+	g.writePrivateMethods(&b, []parser.Screen{s})
 	b.s("}\n")
 	return b.String()
+}
+
+func (g *G) writePrivateMethods(b *B, screens []parser.Screen) {
+	if len(screens) == 0 {
+		return
+	}
+	calledFuncs := map[string]bool{}
+	for _, s := range screens {
+		g.collectFuncCalls(s.Body, calledFuncs)
+	}
+	for fnName := range calledFuncs {
+		if body, ok := g.funcMap[fnName]; ok {
+			b.f("\n private fun %s() {\n", fnName)
+			for _, st := range body {
+				b.s(g.stmt(st, "  "))
+			}
+			b.s(" }\n")
+		}
+	}
 }
 
 func (g *G) setupCode(s parser.Screen, ind string) string {
@@ -117,23 +107,38 @@ func (g *G) setupCode(s parser.Screen, ind string) string {
 	return b.String()
 }
 
-// setupCodeWithFuncs generates setup code + private methods for called functions
-func (g *G) setupCodeWithFuncs(s parser.Screen, ind string) string {
+func (g *G) setupComponent(ce parser.CallExpr, uid, ind string) string {
 	var b B
-	b.s(g.setupCode(s, ind))
-
-	// Collect called function names
-	calledFuncs := map[string]bool{}
-	g.collectFuncCalls(s.Body, calledFuncs)
-
-	// Generate private methods
-	for fnName := range calledFuncs {
-		if body, ok := g.funcMap[fnName]; ok {
-			b.f("\n%sprivate fun %s() {\n", ind, fnName)
-			for _, st := range body {
-				b.s(g.stmt(st, ind+"    "))
+	switch ce.Fn {
+	case "__text":
+		if len(ce.Args) > 0 {
+			b.f("%sfindViewById<TextView>(R.id.%s).text = %s\n", ind, uid, g.expr(ce.Args[0]))
+		}
+	case "__button":
+		label := `"Button"`
+		if len(ce.Args) > 0 {
+			label = g.expr(ce.Args[0])
+		}
+		b.f("%sfindViewById<Button>(R.id.%s).setOnClickListener {\n", ind, uid)
+		if len(ce.Args) > 1 {
+			if blk, ok := ce.Args[1].(*parser.BlockExpr); ok {
+				for _, s := range blk.Body {
+					b.s(g.stmt(s, ind+" "))
+				}
 			}
-			b.f("%s}\n", ind)
+		} else {
+			b.f("%s Toast.makeText(this, %s, Toast.LENGTH_SHORT).show()\n", ind, label)
+		}
+		b.f("%s}\n", ind)
+	case "__switch":
+		if len(ce.Args) > 1 {
+			if blk, ok := ce.Args[1].(*parser.BlockExpr); ok {
+				b.f("%sfindViewById<Switch>(R.id.%s).setOnCheckedChangeListener { _, isChecked ->\n", ind, uid)
+				for _, s := range blk.Body {
+					b.s(g.stmt(s, ind+" "))
+				}
+				b.f("%s}\n", ind)
+			}
 		}
 	}
 	return b.String()
@@ -147,13 +152,23 @@ func (g *G) collectFuncCalls(stmts []parser.Stmt, called map[string]bool) {
 		case parser.IfStmt:
 			g.collectFuncCalls(s.Then, called)
 			g.collectFuncCalls(s.Else, called)
-		case parser.ForStmt:
-			g.collectFuncCalls(s.Body, called)
-		case parser.WhileStmt:
-			g.collectFuncCalls(s.Body, called)
+		case parser.ForStmt, parser.WhileStmt:
+			body := g.getStmtBody(s)
+			g.collectFuncCalls(body, called)
 		case parser.BgStmt:
 			g.collectFuncCalls(s.Body, called)
 		}
+	}
+}
+
+func (g *G) getStmtBody(s parser.Stmt) []parser.Stmt {
+	switch st := s.(type) {
+	case parser.ForStmt:
+		return st.Body
+	case parser.WhileStmt:
+		return st.Body
+	default:
+		return nil
 	}
 }
 
@@ -168,7 +183,6 @@ func (g *G) collectExprFuncs(e parser.Expr, called map[string]bool) {
 		}
 		for _, a := range ex.Args {
 			g.collectExprFuncs(a, called)
-			// Also check if arg is a BlockExpr
 			if blk, ok := a.(*parser.BlockExpr); ok {
 				g.collectFuncCalls(blk.Body, called)
 			}
@@ -191,128 +205,117 @@ func (g *G) collectExprFuncs(e parser.Expr, called map[string]bool) {
 	}
 }
 
-func (g *G) setupComponent(ce parser.CallExpr, uid, ind string) string {
+// stmtHandlers maps statement types to their code generators
+func (g *G) stmt(s parser.Stmt, ind string) string {
+	switch st := s.(type) {
+	case parser.AssignStmt:
+		return fmt.Sprintf("%sval %s = %s\n", ind, st.Name, g.expr(st.Val))
+	case parser.NavStmt:
+		return fmt.Sprintf("%sstartActivity(Intent(this, %sActivity::class.java))\n", ind, st.Target)
+	case parser.BackStmt:
+		return fmt.Sprintf("%sfinish()\n", ind)
+	case parser.ToastStmt:
+		return fmt.Sprintf("%sToast.makeText(this, %s, Toast.LENGTH_SHORT).show()\n", ind, g.expr(st.Msg))
+	case parser.VibStmt:
+		return fmt.Sprintf("%svibrate(200)\n", ind)
+	case parser.NotifStmt:
+		return fmt.Sprintf("%s// notify: %s, %s\n", ind, g.expr(st.Title), g.expr(st.Msg))
+	case parser.IfStmt:
+		return g.ifStmt(st, ind)
+	case parser.ForStmt:
+		return g.forStmt(st, ind)
+	case parser.WhileStmt:
+		return g.whileStmt(st, ind)
+	case parser.RetStmt:
+		return fmt.Sprintf("%sreturn %s\n", ind, g.expr(st.Val))
+	case parser.AwaitStmt:
+		return fmt.Sprintf("%s// await %s\n", ind, g.expr(st.Call))
+	case parser.BgStmt:
+		return g.bgStmt(st, ind)
+	case parser.NativeStmt:
+		return fmt.Sprintf("%s%s\n", ind, st.Code)
+	case parser.HttpStmt:
+		return g.httpStmt(st, ind)
+	case parser.StateStmt:
+		return fmt.Sprintf("%svar %s = %s\n", ind, st.Name, g.expr(st.Initial))
+	case parser.ShareStmt:
+		return g.shareStmt(st, ind)
+	case parser.OpenStmt:
+		return fmt.Sprintf("%sstartActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(%s)))\n", ind, g.expr(st.URL))
+	case parser.AlertStmt:
+		return fmt.Sprintf("%sandroid.app.AlertDialog.Builder(this).setTitle(%s).setMessage(%s).setPositiveButton(\"OK\", null).show()\n", ind, g.expr(st.Title), g.expr(st.Msg))
+	case parser.ExprStmt:
+		return fmt.Sprintf("%s%s\n", ind, g.expr(st.E))
+	default:
+		return ""
+	}
+}
+
+func (g *G) ifStmt(st parser.IfStmt, ind string) string {
 	var b B
-	switch ce.Fn {
-	case "__text":
-		if len(ce.Args) > 0 {
-			b.f("%sfindViewById<TextView>(R.id.%s).text = %s\n", ind, uid, g.expr(ce.Args[0]))
-		}
-
-	case "__button":
-		label := "\"Button\""
-		if len(ce.Args) > 0 {
-			label = g.expr(ce.Args[0])
-		}
-		b.f("%sfindViewById<Button>(R.id.%s).setOnClickListener {\n", ind, uid)
-		if len(ce.Args) > 1 {
-			// Has handler
-			if blk, ok := ce.Args[1].(*parser.BlockExpr); ok {
-				for _, s := range blk.Body {
-					b.s(g.stmt(s, ind+"    "))
-				}
-			}
-		} else {
-			b.f("%s    Toast.makeText(this, %s, Toast.LENGTH_SHORT).show()\n", ind, label)
-		}
-		b.f("%s}\n", ind)
-
-	case "__input":
-		// nothing to wire by default
-
-	case "__switch":
-		if len(ce.Args) > 1 {
-			if blk, ok := ce.Args[1].(*parser.BlockExpr); ok {
-				b.f("%sfindViewById<Switch>(R.id.%s).setOnCheckedChangeListener { _, isChecked ->\n", ind, uid)
-				for _, s := range blk.Body {
-					b.s(g.stmt(s, ind+"    "))
-				}
-				b.f("%s}\n", ind)
-			}
+	b.f("%sif (%s) {\n", ind, g.expr(st.Cond))
+	for _, s := range st.Then {
+		b.s(g.stmt(s, ind+" "))
+	}
+	if len(st.Else) > 0 {
+		b.f("%s} else {\n", ind)
+		for _, s := range st.Else {
+			b.s(g.stmt(s, ind+" "))
 		}
 	}
+	b.f("%s}\n", ind)
 	return b.String()
 }
 
-func (g *G) stmt(s parser.Stmt, ind string) string {
+func (g *G) forStmt(st parser.ForStmt, ind string) string {
 	var b B
-	switch st := s.(type) {
-	case parser.AssignStmt:
-		b.f("%sval %s = %s\n", ind, st.Name, g.expr(st.Val))
-	case parser.NavStmt:
-		b.f("%sstartActivity(Intent(this, %sActivity::class.java))\n", ind, st.Target)
-	case parser.BackStmt:
-		b.f("%sfinish()\n", ind)
-	case parser.ToastStmt:
-		b.f("%sToast.makeText(this, %s, Toast.LENGTH_SHORT).show()\n", ind, g.expr(st.Msg))
-	case parser.VibStmt:
-		b.f("%svibrate(200)\n", ind)
-	case parser.NotifStmt:
-		b.f("%s// notify: %s, %s\n", ind, g.expr(st.Title), g.expr(st.Msg))
-	case parser.IfStmt:
-		b.f("%sif (%s) {\n", ind, g.expr(st.Cond))
-		for _, s2 := range st.Then {
-			b.s(g.stmt(s2, ind+"    "))
-		}
-		if len(st.Else) > 0 {
-			b.f("%s} else {\n", ind)
-			for _, s2 := range st.Else {
-				b.s(g.stmt(s2, ind+"    "))
-			}
-		}
-		b.f("%s}\n", ind)
-	case parser.ForStmt:
-		b.f("%sfor (%s in %s) {\n", ind, st.Var, g.expr(st.Iter))
-		for _, s2 := range st.Body {
-			b.s(g.stmt(s2, ind+"    "))
-		}
-		b.f("%s}\n", ind)
-	case parser.WhileStmt:
-		b.f("%swhile (%s) {\n", ind, g.expr(st.Cond))
-		for _, s2 := range st.Body {
-			b.s(g.stmt(s2, ind+"    "))
-		}
-		b.f("%s}\n", ind)
-	case parser.RetStmt:
-		b.f("%sreturn %s\n", ind, g.expr(st.Val))
-	case parser.AwaitStmt:
-		b.f("%s// await %s\n", ind, g.expr(st.Call))
-	case parser.BgStmt:
-		b.f("%sThread {\n", ind)
-		for _, s2 := range st.Body {
-			// Wrap Toast in runOnUiThread inside background blocks
-			if ts, ok := s2.(parser.ToastStmt); ok {
-				b.f("%s    runOnUiThread { Toast.makeText(this, %s, Toast.LENGTH_SHORT).show() }\n", ind, g.expr(ts.Msg))
-			} else {
-				b.s(g.stmt(s2, ind+"    "))
-			}
-		}
-		b.f("%s}.start()\n", ind)
-	case parser.NativeStmt:
-		b.f("%s%s\n", ind, st.Code)
-	case parser.HttpStmt:
-		if st.Method == "GET" && st.ResultVar != "" {
-			// Inside background block: assign directly
-			b.f("%sval %s = java.net.URL(%s).readText()\n", ind, st.ResultVar, g.expr(st.URL))
-		} else if st.Method == "GET" {
-			b.f("%sjava.net.URL(%s).readText()\n", ind, g.expr(st.URL))
-		} else {
-			b.f("%s// %s %s\n", ind, st.Method, g.expr(st.URL))
-		}
-	case parser.StateStmt:
-		b.f("%svar %s = %s\n", ind, st.Name, g.expr(st.Initial))
-	case parser.ShareStmt:
-		b.f("%sval shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND)\n", ind)
-		b.f("%sshareIntent.type = \"text/plain\"\n", ind)
-		b.f("%sshareIntent.putExtra(android.content.Intent.EXTRA_TEXT, %s)\n", ind, g.expr(st.Text))
-		b.f("%sstartActivity(android.content.Intent.createChooser(shareIntent, \"Share\"))\n", ind)
-	case parser.OpenStmt:
-		b.f("%sstartActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(%s)))\n", ind, g.expr(st.URL))
-	case parser.AlertStmt:
-		b.f("%sandroid.app.AlertDialog.Builder(this).setTitle(%s).setMessage(%s).setPositiveButton(\"OK\", null).show()\n", ind, g.expr(st.Title), g.expr(st.Msg))
-	case parser.ExprStmt:
-		b.f("%s%s\n", ind, g.expr(st.E))
+	b.f("%sfor (%s in %s) {\n", ind, st.Var, g.expr(st.Iter))
+	for _, s := range st.Body {
+		b.s(g.stmt(s, ind+" "))
 	}
+	b.f("%s}\n", ind)
+	return b.String()
+}
+
+func (g *G) whileStmt(st parser.WhileStmt, ind string) string {
+	var b B
+	b.f("%swhile (%s) {\n", ind, g.expr(st.Cond))
+	for _, s := range st.Body {
+		b.s(g.stmt(s, ind+" "))
+	}
+	b.f("%s}\n", ind)
+	return b.String()
+}
+
+func (g *G) bgStmt(st parser.BgStmt, ind string) string {
+	var b B
+	b.f("%sThread {\n", ind)
+	for _, s := range st.Body {
+		if ts, ok := s.(parser.ToastStmt); ok {
+			b.f("%s runOnUiThread { Toast.makeText(this, %s, Toast.LENGTH_SHORT).show() }\n", ind, g.expr(ts.Msg))
+		} else {
+			b.s(g.stmt(s, ind+" "))
+		}
+	}
+	b.f("%s}.start()\n", ind)
+	return b.String()
+}
+
+func (g *G) httpStmt(st parser.HttpStmt, ind string) string {
+	if st.Method == "GET" && st.ResultVar != "" {
+		return fmt.Sprintf("%sval %s = java.net.URL(%s).readText()\n", ind, st.ResultVar, g.expr(st.URL))
+	} else if st.Method == "GET" {
+		return fmt.Sprintf("%sjava.net.URL(%s).readText()\n", ind, g.expr(st.URL))
+	}
+	return fmt.Sprintf("%s// %s %s\n", ind, st.Method, g.expr(st.URL))
+}
+
+func (g *G) shareStmt(st parser.ShareStmt, ind string) string {
+	var b B
+	b.f("%sval shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND)\n", ind)
+	b.f("%sshareIntent.type = \"text/plain\"\n", ind)
+	b.f("%sshareIntent.putExtra(android.content.Intent.EXTRA_TEXT, %s)\n", ind, g.expr(st.Text))
+	b.f("%sstartActivity(android.content.Intent.createChooser(shareIntent, \"Share\"))\n", ind)
 	return b.String()
 }
 
@@ -354,15 +357,15 @@ func (g *G) expr(e parser.Expr) string {
 		return fmt.Sprintf("%s[%s]", g.expr(ex.Obj), g.expr(ex.Idx))
 	case parser.ArrExpr:
 		elems := make([]string, len(ex.Elems))
-		for i, e2 := range ex.Elems {
-			elems[i] = g.expr(e2)
+		for i, e := range ex.Elems {
+			elems[i] = g.expr(e)
 		}
 		return fmt.Sprintf("listOf(%s)", strings.Join(elems, ", "))
 	case parser.BlockExpr:
 		var b B
 		b.s("{\n")
 		for _, s := range ex.Body {
-			b.s(g.stmt(s, "    "))
+			b.s(g.stmt(s, " "))
 		}
 		b.s("}")
 		return b.String()
@@ -375,8 +378,8 @@ func (g *G) layout(s parser.Screen) string {
 	var b B
 	b.s("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n")
 	b.s("<LinearLayout xmlns:android=\"http://schemas.android.com/apk/res/android\"\n")
-	b.s("    android:layout_width=\"match_parent\"\n    android:layout_height=\"match_parent\"\n")
-	b.s("    android:orientation=\"vertical\" android:padding=\"16dp\">\n")
+	b.s(" android:layout_width=\"match_parent\"\n android:layout_height=\"match_parent\"\n")
+	b.s(" android:orientation=\"vertical\" android:padding=\"16dp\">\n")
 	id := 0
 	for _, st := range s.Body {
 		id++
@@ -390,41 +393,43 @@ func (g *G) layout(s parser.Screen) string {
 
 func (g *G) layoutNode(b *B, e parser.Expr, id int) {
 	uid := fmt.Sprintf("ion_%d", id)
-	if ce, ok := e.(parser.CallExpr); ok {
-		switch ce.Fn {
-		case "__text":
-			b.f("    <TextView android:id=\"@+id/%s\"\n", uid)
-			b.s("        android:layout_width=\"wrap_content\"\n        android:layout_height=\"wrap_content\"\n")
-			b.s("        android:textSize=\"18sp\" android:padding=\"8dp\" />\n\n")
-		case "__button":
-			b.f("    <Button android:id=\"@+id/%s\"\n", uid)
-			b.s("        android:layout_width=\"match_parent\"\n        android:layout_height=\"wrap_content\"\n")
-			if len(ce.Args) > 0 {
-				b.f("        android:text=%s\n", g.expr(ce.Args[0]))
-			}
-			b.s("        android:layout_marginTop=\"4dp\" />\n\n")
-		case "__input":
-			b.f("    <EditText android:id=\"@+id/%s\"\n", uid)
-			b.s("        android:layout_width=\"match_parent\"\n        android:layout_height=\"wrap_content\"\n")
-			if len(ce.Args) > 0 {
-				b.f("        android:hint=%s\n", g.expr(ce.Args[0]))
-			}
-			b.s("        android:layout_marginTop=\"8dp\" />\n\n")
-		case "__switch":
-			b.f("    <Switch android:id=\"@+id/%s\"\n", uid)
-			b.s("        android:layout_width=\"wrap_content\"\n        android:layout_height=\"wrap_content\"\n")
-			if len(ce.Args) > 0 {
-				b.f("        android:text=%s\n", g.expr(ce.Args[0]))
-			}
-			b.s("        android:layout_marginTop=\"8dp\" />\n\n")
-		case "__image":
-			b.f("    <ImageView android:id=\"@+id/%s\"\n", uid)
-			b.s("        android:layout_width=\"wrap_content\"\n        android:layout_height=\"wrap_content\" />\n\n")
-		case "__progress":
-			b.f("    <ProgressBar android:id=\"@+id/%s\"\n", uid)
-			b.s("        android:layout_width=\"match_parent\"\n        android:layout_height=\"wrap_content\"\n")
-			b.s("        style=\"?android:attr/progressBarStyleHorizontal\" android:max=\"100\" />\n\n")
+	ce, ok := e.(parser.CallExpr)
+	if !ok {
+		return
+	}
+	switch ce.Fn {
+	case "__text":
+		b.f(" <TextView android:id=\"@+id/%s\"\n", uid)
+		b.s("  android:layout_width=\"wrap_content\"\n  android:layout_height=\"wrap_content\"\n")
+		b.s("  android:textSize=\"18sp\" android:padding=\"8dp\" />\n\n")
+	case "__button":
+		b.f(" <Button android:id=\"@+id/%s\"\n", uid)
+		b.s("  android:layout_width=\"match_parent\"\n  android:layout_height=\"wrap_content\"\n")
+		if len(ce.Args) > 0 {
+			b.f("  android:text=%s\n", g.expr(ce.Args[0]))
 		}
+		b.s("  android:layout_marginTop=\"4dp\" />\n\n")
+	case "__input":
+		b.f(" <EditText android:id=\"@+id/%s\"\n", uid)
+		b.s("  android:layout_width=\"match_parent\"\n  android:layout_height=\"wrap_content\"\n")
+		if len(ce.Args) > 0 {
+			b.f("  android:hint=%s\n", g.expr(ce.Args[0]))
+		}
+		b.s("  android:layout_marginTop=\"8dp\" />\n\n")
+	case "__switch":
+		b.f(" <Switch android:id=\"@+id/%s\"\n", uid)
+		b.s("  android:layout_width=\"wrap_content\"\n  android:layout_height=\"wrap_content\"\n")
+		if len(ce.Args) > 0 {
+			b.f("  android:text=%s\n", g.expr(ce.Args[0]))
+		}
+		b.s("  android:layout_marginTop=\"8dp\" />\n\n")
+	case "__image":
+		b.f(" <ImageView android:id=\"@+id/%s\"\n", uid)
+		b.s("  android:layout_width=\"wrap_content\"\n  android:layout_height=\"wrap_content\" />\n\n")
+	case "__progress":
+		b.f(" <ProgressBar android:id=\"@+id/%s\"\n", uid)
+		b.s("  android:layout_width=\"match_parent\"\n  android:layout_height=\"wrap_content\"\n")
+		b.s("  style=\"?android:attr/progressBarStyleHorizontal\" android:max=\"100\" />\n\n")
 	}
 }
 
@@ -432,42 +437,42 @@ func (g *G) manifest(p *parser.Prog) string {
 	var b B
 	b.s("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n")
 	b.f("<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\" package=\"%s\">\n", g.pkg)
-	b.s("    <uses-permission android:name=\"android.permission.INTERNET\" />\n")
-	b.f("    <application android:label=\"%s\"\n", p.Name)
-	b.s("        android:theme=\"@style/Theme.AppCompat.Light\">\n")
-	b.s("        <activity android:name=\".MainActivity\" android:exported=\"true\">\n")
-	b.s("            <intent-filter>\n")
-	b.s("                <action android:name=\"android.intent.action.MAIN\" />\n")
-	b.s("                <category android:name=\"android.intent.category.LAUNCHER\" />\n")
-	b.s("            </intent-filter>\n        </activity>\n")
+	b.s(" <uses-permission android:name=\"android.permission.INTERNET\" />\n")
+	b.f(" <application android:label=\"%s\"\n", p.Name)
+	b.s("  android:theme=\"@style/Theme.AppCompat.Light\">\n")
+	b.s("  <activity android:name=\".MainActivity\" android:exported=\"true\">\n")
+	b.s("   <intent-filter>\n")
+	b.s("    <action android:name=\"android.intent.action.MAIN\" />\n")
+	b.s("    <category android:name=\"android.intent.category.LAUNCHER\" />\n")
+	b.s("   </intent-filter>\n  </activity>\n")
 	if len(p.Screens) > 1 {
 		for _, s := range p.Screens[1:] {
 			b.f("  <activity android:name=\".%sActivity\" />\n", s.Name)
 		}
 	}
-	b.s("    </application>\n</manifest>\n")
+	b.s(" </application>\n</manifest>\n")
 	return b.String()
 }
 
 func (g *G) gradle() string {
 	return fmt.Sprintf(`plugins {
-    id 'com.android.application'
-    id 'org.jetbrains.kotlin.android'
+ id 'com.android.application'
+ id 'org.jetbrains.kotlin.android'
 }
 android {
-    namespace '%s'
-    compileSdk 34
-    defaultConfig {
-        applicationId "%s"
-        minSdk 24
-        targetSdk 34
-        versionCode 1
-        versionName "1.0"
-    }
+ namespace '%s'
+ compileSdk 34
+ defaultConfig {
+ applicationId "%s"
+ minSdk 24
+ targetSdk 34
+ versionCode 1
+ versionName "1.0"
+ }
 }
 dependencies {
-    implementation 'androidx.appcompat:appcompat:1.6.1'
-    implementation 'androidx.core:core-ktx:1.12.0'
+ implementation 'androidx.appcompat:appcompat:1.6.1'
+ implementation 'androidx.core:core-ktx:1.12.0'
 }
 `, g.pkg, g.pkg)
 }

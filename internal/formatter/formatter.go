@@ -74,15 +74,7 @@ func (f *F) stmt(st parser.Stmt, indent int) {
 	case parser.NotifStmt:
 		f.line(indent, "notify("+f.expr(s.Title)+", "+f.expr(s.Msg)+")")
 	case parser.IfStmt:
-		f.line(indent, "if "+f.expr(s.Cond)+" {")
-		f.stmts(s.Then, indent+1)
-		if len(s.Else) == 0 {
-			f.line(indent, "}")
-			return
-		}
-		f.line(indent, "} else {")
-		f.stmts(s.Else, indent+1)
-		f.line(indent, "}")
+		f.ifStmt(s, indent)
 	case parser.ForStmt:
 		f.line(indent, "for "+s.Var+" in "+f.expr(s.Iter)+" {")
 		f.stmts(s.Body, indent+1)
@@ -102,17 +94,9 @@ func (f *F) stmt(st parser.Stmt, indent int) {
 	case parser.NativeStmt:
 		f.line(indent, "native -> "+strconv.Quote(s.Code))
 	case parser.HttpStmt:
-		line := "http " + strings.ToLower(s.Method) + " " + f.expr(s.URL)
-		if s.ResultVar != "" {
-			line += " -> " + s.ResultVar
-		}
-		f.line(indent, line)
+		f.httpStmt(s, indent)
 	case parser.StateStmt:
-		line := "state " + s.Name
-		if s.Initial != nil {
-			line += " = " + f.expr(s.Initial)
-		}
-		f.line(indent, line)
+		f.stateStmt(s, indent)
 	case parser.ShareStmt:
 		f.line(indent, "share("+f.expr(s.Text)+")")
 	case parser.OpenStmt:
@@ -120,15 +104,47 @@ func (f *F) stmt(st parser.Stmt, indent int) {
 	case parser.AlertStmt:
 		f.line(indent, "alert("+f.expr(s.Title)+", "+f.expr(s.Msg)+")")
 	case parser.ExprStmt:
-		if line, ok := f.component(s.E, indent); ok {
-			f.line(indent, line)
-			return
-		}
-		f.line(indent, f.expr(s.E))
+		f.exprStmt(s, indent)
 	}
 }
 
-func (f *F) component(e parser.Expr, indent int) (string, bool) {
+func (f *F) ifStmt(s parser.IfStmt, indent int) {
+	f.line(indent, "if "+f.expr(s.Cond)+" {")
+	f.stmts(s.Then, indent+1)
+	if len(s.Else) == 0 {
+		f.line(indent, "}")
+		return
+	}
+	f.line(indent, "} else {")
+	f.stmts(s.Else, indent+1)
+	f.line(indent, "}")
+}
+
+func (f *F) httpStmt(s parser.HttpStmt, indent int) {
+	line := "http " + strings.ToLower(s.Method) + " " + f.expr(s.URL)
+	if s.ResultVar != "" {
+		line += " -> " + s.ResultVar
+	}
+	f.line(indent, line)
+}
+
+func (f *F) stateStmt(s parser.StateStmt, indent int) {
+	line := "state " + s.Name
+	if s.Initial != nil {
+		line += " = " + f.expr(s.Initial)
+	}
+	f.line(indent, line)
+}
+
+func (f *F) exprStmt(s parser.ExprStmt, indent int) {
+	if line, ok := f.component(s.E); ok {
+		f.line(indent, line)
+		return
+	}
+	f.line(indent, f.expr(s.E))
+}
+
+func (f *F) component(e parser.Expr) (string, bool) {
 	call, ok := e.(parser.CallExpr)
 	if !ok {
 		return "", false
@@ -210,34 +226,30 @@ func (f *F) expr(e parser.Expr) string {
 	case parser.UnExpr:
 		return ex.Op + f.expr(ex.R)
 	case parser.CallExpr:
-		args := make([]string, len(ex.Args))
-		for i, a := range ex.Args {
-			args[i] = f.expr(a)
-		}
-		return ex.Fn + "(" + strings.Join(args, ", ") + ")"
+		return ex.Fn + "(" + f.joinExprs(ex.Args) + ")"
 	case parser.MethodExpr:
-		args := make([]string, len(ex.Args))
-		for i, a := range ex.Args {
-			args[i] = f.expr(a)
-		}
-		return f.expr(ex.Obj) + "." + ex.Method + "(" + strings.Join(args, ", ") + ")"
+		return f.expr(ex.Obj) + "." + ex.Method + "(" + f.joinExprs(ex.Args) + ")"
 	case parser.FieldExpr:
 		return f.expr(ex.Obj) + "." + ex.Field
 	case parser.IdxExpr:
 		return f.expr(ex.Obj) + "[" + f.expr(ex.Idx) + "]"
 	case parser.ArrExpr:
-		parts := make([]string, len(ex.Elems))
-		for i, elem := range ex.Elems {
-			parts[i] = f.expr(elem)
-		}
-		return "[" + strings.Join(parts, ", ") + "]"
+		return "[" + f.joinExprs(ex.Elems) + "]"
 	default:
 		return "null"
 	}
 }
 
+func (f *F) joinExprs(exprs []parser.Expr) string {
+	parts := make([]string, len(exprs))
+	for i, e := range exprs {
+		parts[i] = f.expr(e)
+	}
+	return strings.Join(parts, ", ")
+}
+
 func (f *F) line(indent int, s string) {
-	f.b.WriteString(strings.Repeat("    ", indent))
+	f.b.WriteString(strings.Repeat(" ", indent))
 	f.b.WriteString(s)
 	f.b.WriteByte('\n')
 }
