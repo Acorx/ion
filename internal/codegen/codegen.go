@@ -440,8 +440,10 @@ func (g *G) manifest(p *parser.Prog) string {
 	b.s("                <action android:name=\"android.intent.action.MAIN\" />\n")
 	b.s("                <category android:name=\"android.intent.category.LAUNCHER\" />\n")
 	b.s("            </intent-filter>\n        </activity>\n")
-	for _, s := range p.Screens[1:] {
-		b.f("        <activity android:name=\".%sActivity\" />\n", s.Name)
+	if len(p.Screens) > 1 {
+		for _, s := range p.Screens[1:] {
+			b.f("  <activity android:name=\".%sActivity\" />\n", s.Name)
+		}
 	}
 	b.s("    </application>\n</manifest>\n")
 	return b.String()

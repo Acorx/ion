@@ -607,8 +607,12 @@ func (p *P) expect(t lexer.Type) lexer.Tok {
 	if p.is(t) {
 		return p.next()
 	}
-	p.err(fmt.Sprintf("expected %s, got %s", t, p.cur().T))
-	return lexer.Tok{Lit: ""}
+	cur := p.cur()
+	p.err(fmt.Sprintf("expected %s, got %s", t, cur.T))
+	if !p.done() {
+		p.next()
+	}
+	return cur
 }
 
 func (p *P) done() bool { return p.pos >= len(p.toks) || p.toks[p.pos].T == lexer.EOF }
@@ -620,5 +624,6 @@ func (p *P) skipNL() {
 }
 
 func (p *P) err(msg string) {
-	p.errs = append(p.errs, fmt.Sprintf("line %d: %s", p.cur().Line, msg))
+	cur := p.cur()
+	p.errs = append(p.errs, fmt.Sprintf("line %d, col %d: %s", cur.Line, cur.Col, msg))
 }

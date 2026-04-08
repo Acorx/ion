@@ -100,6 +100,7 @@ type Tok struct {
 	T    Type
 	Lit  string
 	Line int
+	Col  int
 }
 
 var keywords = map[string]Type{
@@ -118,9 +119,10 @@ type L struct {
 	src []byte
 	pos int
 	ln  int
+	col int
 }
 
-func New(src []byte) *L { return &L{src: src, pos: 0, ln: 1} }
+func New(src []byte) *L { return &L{src: src, pos: 0, ln: 1, col: 1} }
 
 func (l *L) All() []Tok {
 	var toks []Tok
@@ -140,21 +142,23 @@ func (l *L) Next() Tok {
 
 		// skip spaces/tabs
 		if c == ' ' || c == '\t' || c == '\r' {
-			l.pos++
+			l.advance()
 			continue
 		}
 
 		// newline
 		if c == '\n' {
+			tok := Tok{T: NEWLINE, Lit: "\\n", Line: l.ln, Col: l.col}
 			l.pos++
 			l.ln++
-			return Tok{NEWLINE, "\\n", l.ln}
+			l.col = 1
+			return tok
 		}
 
 		// comment
 		if c == '/' && l.pos+1 < len(l.src) && l.src[l.pos+1] == '/' {
 			for l.pos < len(l.src) && l.src[l.pos] != '\n' {
-				l.pos++
+				l.advance()
 			}
 			continue
 		}
@@ -176,8 +180,10 @@ func (l *L) Next() Tok {
 
 		// arrow → (UTF-8)
 		if l.pos+2 < len(l.src) && string(l.src[l.pos:l.pos+3]) == "→" {
+			tok := Tok{T: ARROW, Lit: "->", Line: l.ln, Col: l.col}
 			l.pos += 3
-			return Tok{ARROW, "->", l.ln}
+			l.col++
+			return tok
 		}
 
 		// two-char
@@ -185,111 +191,148 @@ func (l *L) Next() Tok {
 			two := string(l.src[l.pos : l.pos+2])
 			switch two {
 			case "->":
+				tok := Tok{T: ARROW, Lit: "->", Line: l.ln, Col: l.col}
 				l.pos += 2
-				return Tok{ARROW, "->", l.ln}
+				l.col += 2
+				return tok
 			case "==":
+				tok := Tok{T: EQ, Lit: "==", Line: l.ln, Col: l.col}
 				l.pos += 2
-				return Tok{EQ, "==", l.ln}
+				l.col += 2
+				return tok
 			case "!=":
+				tok := Tok{T: NEQ, Lit: "!=", Line: l.ln, Col: l.col}
 				l.pos += 2
-				return Tok{NEQ, "!=", l.ln}
+				l.col += 2
+				return tok
 			case "<=":
+				tok := Tok{T: LTE, Lit: "<=", Line: l.ln, Col: l.col}
 				l.pos += 2
-				return Tok{LTE, "<=", l.ln}
+				l.col += 2
+				return tok
 			case ">=":
+				tok := Tok{T: GTE, Lit: ">=", Line: l.ln, Col: l.col}
 				l.pos += 2
-				return Tok{GTE, ">=", l.ln}
+				l.col += 2
+				return tok
 			case "&&":
+				tok := Tok{T: AND, Lit: "&&", Line: l.ln, Col: l.col}
 				l.pos += 2
-				return Tok{AND, "&&", l.ln}
+				l.col += 2
+				return tok
 			case "||":
+				tok := Tok{T: OR, Lit: "||", Line: l.ln, Col: l.col}
 				l.pos += 2
-				return Tok{OR, "||", l.ln}
+				l.col += 2
+				return tok
 			}
 		}
 
 		// single char
-		l.pos++
+		line, col := l.ln, l.col
+		l.advance()
 		switch c {
 		case '(':
-			return Tok{LPAREN, "(", l.ln}
+			return Tok{LPAREN, "(", line, col}
 		case ')':
-			return Tok{RPAREN, ")", l.ln}
+			return Tok{RPAREN, ")", line, col}
 		case '{':
-			return Tok{LBRACE, "{", l.ln}
+			return Tok{LBRACE, "{", line, col}
 		case '}':
-			return Tok{RBRACE, "}", l.ln}
+			return Tok{RBRACE, "}", line, col}
 		case '[':
-			return Tok{LBRACKET, "[", l.ln}
+			return Tok{LBRACKET, "[", line, col}
 		case ']':
-			return Tok{RBRACKET, "]", l.ln}
+			return Tok{RBRACKET, "]", line, col}
 		case ',':
-			return Tok{COMMA, ",", l.ln}
+			return Tok{COMMA, ",", line, col}
 		case '.':
-			return Tok{DOT, ".", l.ln}
+			return Tok{DOT, ".", line, col}
 		case ':':
-			return Tok{COLON, ":", l.ln}
+			return Tok{COLON, ":", line, col}
 		case ';':
-			return Tok{SEMI, ";", l.ln}
+			return Tok{SEMI, ";", line, col}
 		case '=':
-			return Tok{ASSIGN, "=", l.ln}
+			return Tok{ASSIGN, "=", line, col}
 		case '+':
-			return Tok{PLUS, "+", l.ln}
+			return Tok{PLUS, "+", line, col}
 		case '-':
-			return Tok{MINUS, "-", l.ln}
+			return Tok{MINUS, "-", line, col}
 		case '*':
-			return Tok{STAR, "*", l.ln}
+			return Tok{STAR, "*", line, col}
 		case '/':
-			return Tok{SLASH, "/", l.ln}
+			return Tok{SLASH, "/", line, col}
 		case '%':
-			return Tok{MOD, "%", l.ln}
+			return Tok{MOD, "%", line, col}
 		case '<':
-			return Tok{LT, "<", l.ln}
+			return Tok{LT, "<", line, col}
 		case '>':
-			return Tok{GT, ">", l.ln}
+			return Tok{GT, ">", line, col}
 		case '!':
-			return Tok{NOT, "!", l.ln}
+			return Tok{NOT, "!", line, col}
 		default:
-			return Tok{ERROR, string(c), l.ln}
+			return Tok{ERROR, fmt.Sprintf("unexpected character %q", c), line, col}
 		}
 	}
-	return Tok{EOF, "", l.ln}
+	return Tok{EOF, "", l.ln, l.col}
 }
 
 func (l *L) str() Tok {
-	l.pos++ // skip "
-	start := l.pos
+	line, col := l.ln, l.col
+	l.advance() // skip "
+	var b []byte
 	for l.pos < len(l.src) && l.src[l.pos] != '"' && l.src[l.pos] != '\n' {
-		if l.src[l.pos] == '\\' {
-			l.pos++
+		if l.src[l.pos] == '\\' && l.pos+1 < len(l.src) {
+			l.advance()
+			switch l.src[l.pos] {
+			case 'n':
+				b = append(b, '\n')
+			case 't':
+				b = append(b, '\t')
+			case '"':
+				b = append(b, '"')
+			case '\\':
+				b = append(b, '\\')
+			default:
+				b = append(b, l.src[l.pos])
+			}
+		} else {
+			b = append(b, l.src[l.pos])
 		}
-		l.pos++
+		l.advance()
 	}
-	s := string(l.src[start:l.pos])
 	if l.pos < len(l.src) && l.src[l.pos] == '"' {
-		l.pos++
+		l.advance()
+		return Tok{STRING, string(b), line, col}
 	}
-	return Tok{STRING, s, l.ln}
+	return Tok{ERROR, "unterminated string literal", line, col}
 }
 
 func (l *L) num() Tok {
+	line, col := l.ln, l.col
 	start := l.pos
 	for l.pos < len(l.src) && (l.src[l.pos] >= '0' && l.src[l.pos] <= '9' || l.src[l.pos] == '.') {
-		l.pos++
+		l.advance()
 	}
-	return Tok{NUM, string(l.src[start:l.pos]), l.ln}
+	return Tok{NUM, string(l.src[start:l.pos]), line, col}
 }
 
 func (l *L) ident() Tok {
+	line, col := l.ln, l.col
 	start := l.pos
 	for l.pos < len(l.src) && ((l.src[l.pos] >= 'a' && l.src[l.pos] <= 'z') ||
 		(l.src[l.pos] >= 'A' && l.src[l.pos] <= 'Z') ||
 		(l.src[l.pos] >= '0' && l.src[l.pos] <= '9') || l.src[l.pos] == '_' || l.src[l.pos] == '-') {
-		l.pos++
+		l.advance()
 	}
 	word := string(l.src[start:l.pos])
 	if t, ok := keywords[word]; ok {
-		return Tok{t, word, l.ln}
+		return Tok{t, word, line, col}
 	}
-	return Tok{IDENT, word, l.ln}
+	return Tok{IDENT, word, line, col}
+}
+
+func (l *L) advance() {
+	l.pos++
+	l.col++
 }
